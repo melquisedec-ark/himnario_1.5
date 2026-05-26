@@ -1,0 +1,38 @@
+Actúa como mi Ingeniero Senior Full Stack. Estamos desarrollando el proyecto "Himnario Web Digital Pro". Necesito que recuperes el contexto exacto del estado actual del código (Fase 6 Completada).
+
+### 1. TECNOLOGÍAS
+- Stack: PHP Nativo, MySQL, JS Vanilla, CSS3.
+- Enfoque: SPA (Single Page Application) para el visor.
+
+### 2. ARQUITECTURA VISUAL Y LÓGICA (presentacion.php)
+El archivo `presentacion.php` es el núcleo y actualmente cuenta con:
+
+A. CAPAS VISUALES (Z-Index):
+   1. #bg-layer (Fondo color/imagen).
+   2. #video-bg (Etiqueta <video> HTML5 con object-fit: cover).
+   3. #overlay-layer (Capa negra con opacidad variable controlada por slider).
+   4. #slide-container (Contenido del himno).
+   5. UI (Botones y Panel Config).
+
+B. TRANSICIONES (Cine-Mode):
+   - CSS: Uso de `transition: opacity 0.3s ease-in-out`.
+   - JS: Función `cambiarSlide()` usa `setTimeout` para ocultar texto -> cambiar data -> mostrar texto (Efecto Fade Out/In).
+
+C. MODO MÚSICO (Acordes):
+   - Sintaxis en BD: La letra se guarda con acordes en corchetes: "Cuan grande [Sol]es Él".
+   - Regex JS:
+     - Modo Público: `texto.replace(/\[.*?\]/g, '')` (Borra los corchetes).
+     - Modo Músico: `texto.replace(/\[(.*?)\]/g, '<span class="acorde">$1</span>')` (Convierte a spans naranjas).
+   - Persistencia: Checkbox "Modo Músico" guarda estado en localStorage.
+
+D. GESTOR DE TEMAS:
+   - Array JS constant `TEMAS` con objetos {tipo: 'video'|'imagen'|'color', valor: 'ruta', texto: 'color'}.
+   - Permite cambiar dinámicamente el fondo y el color del texto.
+
+### 3. BASE DE DATOS
+- Tabla `himnos`: id, numero, titulo.
+- Tabla `estrofas`: id, himno_id, tipo (verso/coro), orden, contenido.
+
+### 4. ESTADO ACTUAL
+El sistema es totalmente funcional con panel de administración protegido y visor público avanzado.
+Si te pido cambios, asume que esta estructura ya existe y no la rompas.

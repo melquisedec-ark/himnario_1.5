@@ -1,0 +1,44 @@
+Actúa como mi Ingeniero Senior Full Stack. Retomamos el proyecto "Himnario Web Pro" en su fase más avanzada (Fase 8 Completada). Necesito que cargues el contexto técnico exacto del sistema actual.
+
+### 1. TECNOLOGÍAS Y ENTORNO
+- **Stack:** PHP Nativo (sin frameworks), MySQL, JavaScript Vanilla, CSS3.
+- **Librerías:** Bootstrap 5.3 (Solo para Admin y Buscador).
+- **Enfoque:** SPA (Single Page Application) para el visor de proyección.
+
+### 2. ARQUITECTURA DEL VISOR (presentacion.php)
+El visor es altamente visual y reactivo. Características clave implementadas:
+A. CAPAS VISUALES (Z-Index):
+   1. `#bg-layer`: Fondo (Color sólido o Imagen).
+   2. `#video-bg`: Etiqueta HTML5 `<video>` (object-fit: cover) para loops.
+   3. `#overlay-layer`: Capa negra de oscurecimiento variable (slider opacity).
+   4. UI Flotante: Título centrado (`.info-himno`), Botones, Panel Config.
+
+B. DISEÑO Y TEMAS (Array `TEMAS` en JS):
+   - Soporta temas dinámicos que cambian: Fondo, Color Texto, Familia de Fuente (ej. Vintage usa Times New Roman) y Sombra de Texto.
+   - Tema "Vintage": Fondo pergamino, letras oscuras, fuente serif.
+   - Estilos "Premium": Sombras de texto multicapa (`text-shadow`) para alta legibilidad.
+   - Título Superior: Centrado, mayúsculas, tracking amplio, semi-transparente.
+   - Etiquetas Dinámicas: Algoritmo JS cuenta versos anteriores para mostrar "ESTROFA 1", "ESTROFA 2" o "CORO" con peso visual (Extra Bold).
+
+C. FUNCIONALIDADES INTERACTIVAS:
+   - **Transiciones:** Fade In/Out + Scale suave al cambiar diapositivas.
+   - **Modo Músico:** Checkbox que revela acordes (formato `[Sol]`) en color naranja sobre la letra. Usa Regex para ocultarlos en modo normal.
+   - **Ghost Mouse:** El cursor desaparece tras 3 segundos de inactividad.
+   - **Persistencia:** Todo (tema, tamaño letra, oscuridad, modo músico) se guarda en `localStorage`.
+
+### 3. ADMINISTRACIÓN Y BÚSQUEDA (Modo Oscuro)
+- **Login, Admin Dashboard, Crear/Editar y Buscador (`index.php`):**
+  - Implementan **Bootstrap 5.3** con soporte nativo de Dark Mode (`data-bs-theme`).
+  - Botón "🌗 Tema" independiente para Admin y para Público.
+  - El buscador público usa tarjetas (Cards) elegantes y responsivas.
+
+### 4. BASE DE DATOS
+- Tabla `himnos`: id, numero, titulo.
+- Tabla `estrofas`: id, himno_id, tipo (verso/coro), orden, contenido.
+  - Nota: Al editar, la lógica es "Borrar todas las estrofas viejas e insertar las nuevas" para mantener la integridad.
+
+### 5. HOJA DE RUTA FUTURA (Ideas pendientes)
+- Convertir a PWA (Instalable).
+- "Modo Lectura" para móviles (Scroll vertical en lugar de diapositivas).
+
+Si te pido modificaciones, asume que TODA esta estructura ya existe. No propongas códigos que rompan estas funcionalidades.
