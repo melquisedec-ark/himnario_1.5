@@ -1,86 +1,325 @@
 <?php
-session_start();
-if (!isset($_SESSION['usuario_logueado'])) { header("Location: ../login.php"); exit; }
-include '../includes/db.php';
-$id = $_GET['id'];
-$error = "";
+/**
+ * admin/editar.php - Editar himno existente
+ * Precarga datos y usa transacción DELETE+INSERT para actualizar
+ */
+require_once '../includes/db.php';
+require_once '../includes/funciones.php';
+verificarSesion();
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $numero = $_POST['numero'];
-    $titulo = $_POST['titulo'];
-    $tipos = isset($_POST['tipo']) ? $_POST['tipo'] : [];
-    $letras = isset($_POST['contenido']) ? $_POST['contenido'] : [];
-
-    $stmt = $conexion->prepare("UPDATE himnos SET numero = ?, titulo = ? WHERE id = ?");
-    $stmt->bind_param("isi", $numero, $titulo, $id);
-    if ($stmt->execute()) {
-        $conexion->query("DELETE FROM estrofas WHERE himno_id = $id");
-        $stmt_ins = $conexion->prepare("INSERT INTO estrofas (himno_id, tipo, orden, contenido) VALUES (?, ?, ?, ?)");
-        for ($i = 0; $i < count($tipos); $i++) {
-            $orden = $i + 1;
-            $stmt_ins->bind_param("isis", $id, $tipos[$i], $orden, $letras[$i]);
-            $stmt_ins->execute();
-        }
-        header("Location: index.php"); exit;
-    } else { $error = "Error: " . $conexion->error; }
+$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($id <= 0) {
+    header("Location: index.php");
+    exit;
 }
 
-$himno = $conexion->query("SELECT * FROM himnos WHERE id = $id")->fetch_assoc();
-$res_estrofas = $conexion->query("SELECT * FROM estrofas WHERE himno_id = $id ORDER BY orden ASC");
+$error = "";
+
+// Cargar datos actuales del himno
+$stmt = $conexion->prepare("SELECT * FROM himnos WHERE id = ? LIMIT 1");
+$stmt->bind_param("i", $id);
+$stmt->execute();
+$himno = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$himno) {
+    header("Location: index.php");
+    exit;
+}
+
+// Cargar versiones existentes
+$versiones_existentes = obtenerVersiones($conexion, $id);
+
+// Cargar estrofas (de la primera versión activa, o la primera disponible)
+$version_principal_id = 0;
+if (!empty($versiones_existentes)) {
+    // Buscar la primera activa
+    foreach ($versiones_existentes as $v) {
+        if ((int)$v['activo'] === 1) {
+            $version_principal_id = (int)$v['id'];
+            break;
+        }
+    }
+    // Si no hay activa, usar la primera
+    if ($version_principal_id === 0) {
+        $version_principal_id = (int)$versiones_existentes[0]['id'];
+    }
+}
+
 $estrofas_existentes = [];
-while($row = $res_estrofas->fetch_assoc()) { $estrofas_existentes[] = $row; }
+if ($version_principal_id > 0) {
+    $estrofas_existentes = obtenerEstrofas($conexion, $version_principal_id);
+}
+
+// Cargar categorías del himno
+$categorias_del_himno = [];
+$stmt_cat = $conexion->prepare("SELECT categoria_id FROM himno_categoria WHERE himno_id = ?");
+$stmt_cat->bind_param("i", $id);
+$stmt_cat->execute();
+$res_cat = $stmt_cat->get_result();
+while ($row = $res_cat->fetch_assoc()) {
+    $categorias_del_himno[] = (int)$row['categoria_id'];
+}
+$stmt_cat->close();
+
+// Cargar listas para formulario
+$paises = $conexion->query("SELECT id, nombre, codigo FROM paises ORDER BY nombre ASC");
+$categorias_list = $conexion->query("SELECT id, nombre FROM categorias ORDER BY nombre ASC");
+
+// Procesar formulario
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $titulo_principal = trim($_POST['titulo_principal'] ?? '');
+    $numero_oficial = (int)($_POST['numero_oficial'] ?? 0);
+    $tipo = (int)($_POST['tipo'] ?? 1);
+    $evento = trim($_POST['evento'] ?? '');
+    $activo = isset($_POST['activo']) ? 1 : 0;
+
+    $paises_version = $_POST['pais_id'] ?? [];
+    $tonalidades = $_POST['tonalidad'] ?? [];
+    $categorias_seleccionadas = $_POST['categorias'] ?? [];
+    $tipos_estrofa = $_POST['tipo_estrofa'] ?? [];
+    $contenidos_estrofa = $_POST['contenido_estrofa'] ?? [];
+
+    if ($titulo_principal === '') {
+        $error = "El título del himno es obligatorio.";
+    } elseif ($numero_oficial <= 0) {
+        $error = "El número oficial debe ser un valor positivo.";
+    } elseif (empty($tipos_estrofa) || count($contenidos_estrofa) === 0) {
+        $error = "Debe agregar al menos una estrofa.";
+    } elseif (empty($paises_version)) {
+        $error = "Debe agregar al menos una versión por país.";
+    } else {
+        // Verificar que no haya duplicado de número (excluyendo este himno)
+        $check = $conexion->prepare("SELECT id FROM himnos WHERE numero_oficial = ? AND id != ? LIMIT 1");
+        $check->bind_param("ii", $numero_oficial, $id);
+        $check->execute();
+        if ($check->get_result()->num_rows > 0) {
+            $error = "El himno número $numero_oficial ya existe en otro registro.";
+        } else {
+            // INICIAR TRANSACCIÓN
+            $conexion->begin_transaction();
+            try {
+                // 1. UPDATE himno
+                $stmt_himno = $conexion->prepare(
+                    "UPDATE himnos SET titulo_principal = ?, numero_oficial = ?, tipo = ?, evento = ?, activo = ? WHERE id = ?"
+                );
+                $stmt_himno->bind_param("siisii", $titulo_principal, $numero_oficial, $tipo, $evento, $activo, $id);
+                $stmt_himno->execute();
+                $stmt_himno->close();
+
+                // 2. DELETE + INSERT versiones_pais y estrofas
+                // Obtener versiones actuales para borrar estrofas en cascada
+                $vp_ids = [];
+                $res_vp = $conexion->query("SELECT id FROM versiones_pais WHERE himno_id = $id");
+                while ($row = $res_vp->fetch_assoc()) {
+                    $vp_ids[] = (int)$row['id'];
+                }
+
+                // Borrar estrofas de todas las versiones
+                if (!empty($vp_ids)) {
+                    $vp_list = implode(',', $vp_ids);
+                    $conexion->query("DELETE FROM estrofas WHERE version_pais_id IN ($vp_list)");
+                }
+
+                // Borrar versiones_pais
+                $conexion->query("DELETE FROM versiones_pais WHERE himno_id = $id");
+
+                // Insertar nuevas versiones y estrofas
+                $stmt_vp = $conexion->prepare(
+                    "INSERT INTO versiones_pais (himno_id, pais_id, tonalidad_original, activo) VALUES (?, ?, ?, 1)"
+                );
+                $stmt_estrofa = $conexion->prepare(
+                    "INSERT INTO estrofas (version_pais_id, tipo, orden, contenido) VALUES (?, ?, ?, ?)"
+                );
+
+                foreach ($paises_version as $idx => $pais_id) {
+                    $pais_id_int = (int)$pais_id;
+                    $tonalidad = trim($tonalidades[$idx] ?? '');
+
+                    $stmt_vp->bind_param("iis", $id, $pais_id_int, $tonalidad);
+                    $stmt_vp->execute();
+                    $version_pais_id = $conexion->insert_id;
+
+                    foreach ($tipos_estrofa as $orden => $tipo_estrofa) {
+                        $contenido = $contenidos_estrofa[$orden] ?? '';
+                        if (trim($contenido) === '') continue;
+                        $orden_num = $orden + 1;
+                        $stmt_estrofa->bind_param("isis", $version_pais_id, $tipo_estrofa, $orden_num, $contenido);
+                        $stmt_estrofa->execute();
+                    }
+                }
+                $stmt_vp->close();
+                $stmt_estrofa->close();
+
+                // 3. DELETE + INSERT categorías
+                $conexion->query("DELETE FROM himno_categoria WHERE himno_id = $id");
+                if (!empty($categorias_seleccionadas)) {
+                    $stmt_cat = $conexion->prepare("INSERT INTO himno_categoria (himno_id, categoria_id) VALUES (?, ?)");
+                    foreach ($categorias_seleccionadas as $cat_id) {
+                        $cat_id_int = (int)$cat_id;
+                        $stmt_cat->bind_param("ii", $id, $cat_id_int);
+                        $stmt_cat->execute();
+                    }
+                    $stmt_cat->close();
+                }
+
+                $conexion->commit();
+                header("Location: index.php?msg=actualizado");
+                exit;
+            } catch (Exception $e) {
+                $conexion->rollback();
+                $error = "Error al actualizar: " . $e->getMessage();
+            }
+        }
+        $check->close();
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
-    <title>Editar Himno</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Himno - Himnario Digital</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
     <style>
-        .estrofa-box { 
-            background-color: var(--bs-tertiary-bg); 
+        .estrofa-box {
+            background-color: var(--bs-tertiary-bg);
             border: 1px solid var(--bs-border-color);
-            padding: 15px; margin-bottom: 15px; border-radius: 8px; position: relative; 
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            position: relative;
         }
-        .btn-eliminar { position: absolute; top: 10px; right: 10px; color: var(--bs-danger); border: none; background: none; font-weight: bold; }
+        .version-box {
+            background-color: var(--bs-tertiary-bg);
+            border: 1px solid var(--bs-border-color);
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            position: relative;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .categoria-checkbox { margin-right: 8px; }
+        .categoria-label { display: inline-block; margin-right: 16px; margin-bottom: 8px; }
     </style>
 </head>
 <body>
 
 <div class="container mt-4 mb-5">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="index.php">Panel</a></li>
+            <li class="breadcrumb-item active">Editar Himno #<?php echo (int)$himno['numero_oficial']; ?></li>
+        </ol>
+    </nav>
+
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>✏️ Editar Himno</h2>
+        <h2>✏️ Editar: <?php echo sanitizar($himno['titulo_principal']); ?></h2>
         <div>
-            <button class="btn btn-outline-secondary btn-sm me-2" onclick="cambiarTema()">🌗 Tema</button>
-            <a href="index.php" class="btn btn-outline-secondary btn-sm">Cancelar</a>
+            <button class="btn btn-outline-secondary btn-sm me-2" onclick="Himnario.toggleTheme()">🌗 Tema</button>
+            <a href="index.php" class="btn btn-outline-primary btn-sm">Volver</a>
         </div>
     </div>
 
-    <?php if ($error): ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
+    <?php if ($error): ?>
+        <div class="alert alert-danger alert-dismissible fade show"><?php echo sanitizar($error); ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    <?php endif; ?>
 
     <div class="card shadow-sm">
         <div class="card-body">
-            <form method="POST">
-                <div class="row mb-4">
-                    <div class="col-md-3">
-                        <label class="form-label">Número</label>
-                        <input type="number" name="numero" class="form-control" value="<?php echo $himno['numero']; ?>" required>
+            <form method="POST" class="admin-form" id="form-himno">
+                <!-- SECCIÓN 1: DATOS DEL HIMNO -->
+                <div class="form-section">
+                    <h5 class="mb-3">📄 Datos del Himno</h5>
+                    <div class="form-row">
+                        <div>
+                            <label class="form-label">Número Oficial *</label>
+                            <input type="number" name="numero_oficial" class="form-control" required
+                                   value="<?php echo (int)$himno['numero_oficial']; ?>">
+                        </div>
+                        <div>
+                            <label class="form-label">Título Principal *</label>
+                            <input type="text" name="titulo_principal" class="form-control" required
+                                   value="<?php echo sanitizar($himno['titulo_principal']); ?>">
+                        </div>
                     </div>
-                    <div class="col-md-9">
-                        <label class="form-label">Título</label>
-                        <input type="text" name="titulo" class="form-control" value="<?php echo $himno['titulo']; ?>" required>
+                    <div class="form-row">
+                        <div>
+                            <label class="form-label">Tipo</label>
+                            <select name="tipo" class="form-select">
+                                <option value="1" <?php echo (int)$himno['tipo'] === 1 ? 'selected' : ''; ?>>Oficial</option>
+                                <option value="2" <?php echo (int)$himno['tipo'] === 2 ? 'selected' : ''; ?>>Inspirada</option>
+                                <option value="3" <?php echo (int)$himno['tipo'] === 3 ? 'selected' : ''; ?>>Convención</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label">Evento</label>
+                            <input type="text" name="evento" class="form-control"
+                                   value="<?php echo sanitizar($himno['evento'] ?? ''); ?>"
+                                   placeholder="Ej: Convención Nacional 2024">
+                        </div>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input type="checkbox" name="activo" id="activo" class="form-check-input" value="1"
+                               <?php echo (int)$himno['activo'] === 1 ? 'checked' : ''; ?>>
+                        <label class="form-check-label" for="activo">Himno activo</label>
                     </div>
                 </div>
 
-                <hr>
-                <div id="contenedor-estrofas"></div>
-
-                <div class="d-flex gap-2 mb-4 mt-3">
-                    <button type="button" class="btn btn-outline-primary" onclick="agregarBloque('verso')">+ Verso</button>
-                    <button type="button" class="btn btn-outline-warning" onclick="agregarBloque('coro')">+ Coro</button>
+                <!-- SECCIÓN 2: VERSIONES POR PAÍS -->
+                <div class="form-section">
+                    <h5 class="mb-3">🌍 Versiones por País</h5>
+                    <p class="form-help-text">Las estrofas se aplicarán a todas las versiones.</p>
+                    <div id="versiones-container">
+                        <!-- Las versiones existentes se cargan vía JS -->
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="agregarVersion()">+ Agregar Versión</button>
                 </div>
 
-                <div class="d-grid">
+                <!-- SECCIÓN 3: CATEGORÍAS -->
+                <div class="form-section">
+                    <h5 class="mb-3">🏷️ Categorías</h5>
+                    <div>
+                        <?php if ($categorias_list && $categorias_list->num_rows > 0):
+                            $categorias_list->data_seek(0);
+                            while($cat = $categorias_list->fetch_assoc()): ?>
+                                <label class="categoria-label">
+                                    <input type="checkbox" name="categorias[]" value="<?php echo (int)$cat['id']; ?>"
+                                           class="categoria-checkbox"
+                                           <?php echo in_array((int)$cat['id'], $categorias_del_himno) ? 'checked' : ''; ?>>
+                                    <?php echo sanitizar($cat['nombre']); ?>
+                                </label>
+                            <?php endwhile; ?>
+                        <?php else: ?>
+                            <p class="text-muted small">No hay categorías disponibles.</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- SECCIÓN 4: ESTROFAS -->
+                <div class="form-section">
+                    <h5 class="mb-3">📝 Estrofas</h5>
+                    <p class="form-help-text">Use los botones para agregar/quitar estrofas.</p>
+                    <div id="estrofas-container">
+                        <!-- Las estrofas existentes se cargan vía JS -->
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <button type="button" class="btn btn-outline-primary" onclick="agregarEstrofa('Estrofa')">+ Estrofa</button>
+                        <button type="button" class="btn btn-outline-warning" onclick="agregarEstrofa('Coro')">+ Coro</button>
+                        <button type="button" class="btn btn-outline-info" onclick="agregarEstrofa('Puente')">+ Puente</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="agregarEstrofa('Intro')">+ Intro</button>
+                        <button type="button" class="btn btn-outline-danger" onclick="agregarEstrofa('Final')">+ Final</button>
+                    </div>
+                </div>
+
+                <div class="d-grid mt-4">
                     <button type="submit" class="btn btn-primary btn-lg">💾 Guardar Cambios</button>
                 </div>
             </form>
@@ -89,31 +328,105 @@ while($row = $res_estrofas->fetch_assoc()) { $estrofas_existentes[] = $row; }
 </div>
 
 <script>
-    const html = document.documentElement;
-    const savedTheme = localStorage.getItem('admin_theme') || 'light';
-    html.setAttribute('data-bs-theme', savedTheme);
+    // Datos para precarga
+    const PAISES = <?php
+        $paises->data_seek(0);
+        $paises_data = [];
+        while($p = $paises->fetch_assoc()) {
+            $paises_data[] = ['id' => (int)$p['id'], 'nombre' => $p['nombre']];
+        }
+        echo json_encode($paises_data);
+    ?>;
 
-    function cambiarTema() {
-        const next = html.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
-        html.setAttribute('data-bs-theme', next);
-        localStorage.setItem('admin_theme', next);
+    const VERSIONES_EXISTENTES = <?php
+        // Re-cargar versiones por si POST cambió algo (aunque en GET estamos bien)
+        $versiones = obtenerVersiones($conexion, $id);
+        echo json_encode($versiones);
+    ?>;
+
+    const ESTROFAS_EXISTENTES = <?php
+        $estrofas = [];
+        if ($version_principal_id > 0) {
+            $estrofas = obtenerEstrofas($conexion, $version_principal_id);
+        }
+        echo json_encode($estrofas);
+    ?>;
+
+    let versionCount = 0;
+
+    function agregarVersion(paisId, tonalidad) {
+        versionCount++;
+        const container = document.getElementById('versiones-container');
+        const div = document.createElement('div');
+        div.className = 'version-box';
+
+        let options = '<option value="">Seleccionar país...</option>';
+        PAISES.forEach(function(p) {
+            const selected = (paisId && parseInt(paisId) === p.id) ? 'selected' : '';
+            options += '<option value="' + p.id + '" ' + selected + '>' + p.nombre + '</option>';
+        });
+
+        div.innerHTML = `
+            <select name="pais_id[]" class="form-select form-select-sm" style="flex:1;min-width:180px" required>
+                ${options}
+            </select>
+            <input type="text" name="tonalidad[]" class="form-control form-control-sm" style="width:120px"
+                   placeholder="Tonalidad" value="${tonalidad || ''}">
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest('.version-box').remove()">✕</button>
+        `;
+        container.appendChild(div);
     }
 
-    const contenedor = document.getElementById('contenedor-estrofas');
-    function agregarBloque(tipo, contenido = '') {
+    // Cargar versiones existentes
+    if (VERSIONES_EXISTENTES && VERSIONES_EXISTENTES.length > 0) {
+        VERSIONES_EXISTENTES.forEach(function(v) {
+            agregarVersion(v.pais_id, v.tonalidad_original || '');
+        });
+    } else {
+        agregarVersion();
+    }
+
+    // Cargar estrofas existentes
+    window.agregarEstrofa = function(tipo, contenido) {
+        const container = document.getElementById('estrofas-container');
+        const count = container.children.length + 1;
+
         const div = document.createElement('div');
         div.className = 'estrofa-box';
-        const etiqueta = tipo === 'verso' ? '<span class="badge bg-primary">VERSO</span>' : '<span class="badge bg-warning text-dark">CORO</span>';
+
+        const etiquetas = {
+            'Estrofa': '<span class="badge bg-primary">ESTROFA</span>',
+            'Coro': '<span class="badge bg-warning text-dark">CORO</span>',
+            'Puente': '<span class="badge bg-info text-dark">PUENTE</span>',
+            'Intro': '<span class="badge bg-secondary">INTRO</span>',
+            'Final': '<span class="badge bg-danger">FINAL</span>'
+        };
+
         div.innerHTML = `
-            <div class="d-flex justify-content-between mb-2">${etiqueta}<button type="button" class="btn-eliminar" onclick="this.parentElement.parentElement.remove()">✕</button></div>
-            <input type="hidden" name="tipo[]" value="${tipo}">
-            <textarea name="contenido[]" class="form-control" rows="4" required>${contenido}</textarea>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                ${etiquetas[tipo] || etiquetas['Estrofa']}
+                <div>
+                    <span class="badge bg-dark me-1">#${count}</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.estrofa-box').remove()">✕</button>
+                </div>
+            </div>
+            <input type="hidden" name="tipo_estrofa[]" value="${tipo}">
+            <textarea name="contenido_estrofa[]" class="form-control" rows="4"
+                      placeholder="Escribe la letra aquí..." required>${contenido || ''}</textarea>
         `;
-        contenedor.appendChild(div);
+        container.appendChild(div);
+    };
+
+    if (ESTROFAS_EXISTENTES && ESTROFAS_EXISTENTES.length > 0) {
+        ESTROFAS_EXISTENTES.forEach(function(e) {
+            agregarEstrofa(e.tipo, e.contenido || '');
+        });
     }
 
-    const datosGuardados = <?php echo json_encode($estrofas_existentes); ?>;
-    datosGuardados.forEach(item => agregarBloque(item.tipo, item.contenido));
+    document.addEventListener('DOMContentLoaded', function() {
+        Himnario.initPage('admin-editar');
+    });
 </script>
+<script src="../js/app.js" defer></script>
 </body>
 </html>

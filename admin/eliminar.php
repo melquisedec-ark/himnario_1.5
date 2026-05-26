@@ -1,26 +1,24 @@
 <?php
-session_start();
-// 1. Seguridad: Solo admins pueden borrar
-if (!isset($_SESSION['usuario_logueado'])) {
-    header("Location: ../login.php");
-    exit;
-}
-
-include '../includes/db.php';
+/**
+ * admin/eliminar.php - Eliminar himno (ON DELETE CASCADE se encarga del resto)
+ */
+require_once '../includes/db.php';
+require_once '../includes/funciones.php';
+verificarSesion();
 
 if (isset($_GET['id'])) {
-    $id = $_GET['id'];
-    
-    // PRECAUCIÓN: Al borrar el himno, MySQL borrará sus estrofas automáticamente (Cascade)
+    $id = (int)$_GET['id'];
+
     $stmt = $conexion->prepare("DELETE FROM himnos WHERE id = ?");
     $stmt->bind_param("i", $id);
-    
+
     if ($stmt->execute()) {
         header("Location: index.php?msg=eliminado");
     } else {
-        echo "Error al eliminar: " . $conexion->error;
+        echo "Error al eliminar: " . sanitizar($conexion->error);
     }
+    $stmt->close();
 } else {
     header("Location: index.php");
 }
-?>
+exit;
