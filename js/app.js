@@ -484,7 +484,50 @@ window.Himnario = (function() {
         },
 
         /**
-         * Reindexa las estrofas después de una eliminación.
+         * Mueve una estrofa hacia arriba (intercambia con la anterior).
+         * @param {number} index - Índice de la estrofa a mover (0-based)
+         * @returns {boolean} true si se movió
+         */
+        moveUp: function(index) {
+            const blocks = this._container.querySelectorAll('.estrofa-box');
+            if (index <= 0 || index >= blocks.length) return false;
+            // Intercambiar nodos DOM
+            const current = blocks[index];
+            const previous = blocks[index - 1];
+            this._container.insertBefore(current, previous);
+            this._reindex();
+            this._scrollToElement(current);
+            return true;
+        },
+
+        /**
+         * Mueve una estrofa hacia abajo (intercambia con la siguiente).
+         * @param {number} index - Índice de la estrofa a mover (0-based)
+         * @returns {boolean} true si se movió
+         */
+        moveDown: function(index) {
+            const blocks = this._container.querySelectorAll('.estrofa-box');
+            if (index < 0 || index >= blocks.length - 1) return false;
+            const current = blocks[index];
+            const next = blocks[index + 1];
+            this._container.insertBefore(next, current);
+            this._reindex();
+            this._scrollToElement(current);
+            return true;
+        },
+
+        /**
+         * Hace scroll suave hasta un elemento.
+         * @private
+         */
+        _scrollToElement: function(el) {
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        },
+
+        /**
+         * Reindexa las estrofas después de una eliminación o reordenamiento.
          * @private
          */
         _reindex: function() {
@@ -492,7 +535,13 @@ window.Himnario = (function() {
             const blocks = this._container.querySelectorAll('.estrofa-box');
             blocks.forEach((block, index) => {
                 this._count = index + 1;
-                block.querySelector('.badge.bg-dark')?.textContent = '#' + (index + 1);
+                const badge = block.querySelector('.badge.bg-dark');
+                if (badge) badge.textContent = '#' + (index + 1);
+                // Actualizar el atributo dataset
+                block.dataset.orden = index + 1;
+                // Actualizar el hidden input de orden si existe
+                const ordenInput = block.querySelector('input[name="orden[]"]');
+                if (ordenInput) ordenInput.value = index + 1;
             });
         },
     };
@@ -883,7 +932,67 @@ window.Himnario = (function() {
     };
 
     // ====================================================================
-    // 8. INICIALIZACIÓN POR PÁGINA (PageRouter)
+    // 8. MÓDULO: ATAJOS DE TECLADO (KeyboardShortcuts)
+    // Usado en: index.php, admin/*.php
+    // ====================================================================
+
+    /**
+     * KeyboardShortcuts — Atajos de teclado globales.
+     *
+     * Atajos:
+     *   Ctrl+K / ⌘K → Enfocar búsqueda
+     *   ?           → Mostrar ayuda de atajos
+     */
+    const KeyboardShortcuts = {
+        _initialized: false,
+
+        /**
+         * Inicializa los atajos de teclado.
+         * @returns {void}
+         */
+        init: function() {
+            if (this._initialized) return;
+            this._initialized = true;
+
+            document.addEventListener('keydown', function(e) {
+                // Ctrl+K / ⌘K → enfocar búsqueda
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    var q = document.querySelector('input[name="q"]');
+                    if (q) {
+                        q.focus();
+                        q.select();
+                    }
+                }
+
+                // ? → mostrar ayuda de atajos (solo si no está en un input)
+                if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.target.matches('input,textarea,select')) {
+                    e.preventDefault();
+                    // Usar UIUtils si está disponible
+                    if (typeof UIUtils !== 'undefined' && UIUtils.showToast) {
+                        UIUtils.showToast('⌨️ Ctrl+K: Buscar | ?: Ayuda', 'info', 3000);
+                    } else {
+                        // Fallback a alert
+                        alert('Atajos de teclado:\n\nCtrl+K — Buscar himno\n? — Mostrar esta ayuda');
+                    }
+                }
+
+                // Escape → cerrar modales/paneles si existen
+                if (e.key === 'Escape') {
+                    // Cerrar dropdowns de Bootstrap
+                    var openDropdowns = document.querySelectorAll('.dropdown-menu.show');
+                    openDropdowns.forEach(function(d) {
+                        d.classList.remove('show');
+                    });
+                }
+            });
+
+            console.log('[KeyboardShortcuts] Inicializado');
+        },
+    };
+
+    // ====================================================================
+    // 9. INICIALIZACIÓN POR PÁGINA (PageRouter)
     // ====================================================================
 
     /**
@@ -949,6 +1058,50 @@ window.Himnario = (function() {
             // ThemeManager ya está inicializado arriba
             // Escuchar cambios de tema desde Bootstrap
             ThemeManager.listenBootstrapChanges();
+
+            // Atajos de teclado
+            KeyboardShortcuts.init();
+
+            // Scroll progresivo con IntersectionObserver (si hay muchas cards)
+            this._initScrollReveal();
+        },
+
+        /**
+         * Revela cards progresivamente al hacer scroll.
+         * @private
+         */
+        _initScrollReveal: function() {
+            var cards = document.querySelectorAll('.himno-card');
+            if (!cards.length) return;
+
+            if ('IntersectionObserver' in window && cards.length > 50) {
+                // Preparar animación inicial
+                cards.forEach(function(card) {
+                    card.style.opacity = '0';
+                    card.style.transform = 'translateY(20px)';
+                    card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                });
+
+                var observer = new IntersectionObserver(function(entries) {
+                    entries.forEach(function(entry) {
+                        if (entry.isIntersecting) {
+                            entry.target.style.opacity = '1';
+                            entry.target.style.transform = 'translateY(0)';
+                            observer.unobserve(entry.target);
+                        }
+                    });
+                }, { rootMargin: '100px' });
+
+                cards.forEach(function(card) {
+                    observer.observe(card);
+                });
+            } else {
+                // Fallback: mostrar todo inmediatamente
+                cards.forEach(function(card) {
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                });
+            }
         },
 
         /**
@@ -987,6 +1140,7 @@ window.Himnario = (function() {
          */
         _initAdminIndex: function() {
             ThemeManager.listenBootstrapChanges();
+            KeyboardShortcuts.init();
         },
 
         /**
@@ -999,6 +1153,9 @@ window.Himnario = (function() {
 
             // ThemeManager
             ThemeManager.listenBootstrapChanges();
+
+            // Atajos de teclado
+            KeyboardShortcuts.init();
         },
 
         /**
@@ -1020,6 +1177,9 @@ window.Himnario = (function() {
 
             // ThemeManager
             ThemeManager.listenBootstrapChanges();
+
+            // Atajos de teclado
+            KeyboardShortcuts.init();
         },
 
         /**
@@ -1048,6 +1208,7 @@ window.Himnario = (function() {
         FullscreenManager: FullscreenManager,
         UIUtils: UIUtils,
         PageRouter: PageRouter,
+        KeyboardShortcuts: KeyboardShortcuts,
 
         // Atajos
         init: function() { ThemeManager.init(); },

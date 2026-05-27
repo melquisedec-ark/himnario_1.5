@@ -213,11 +213,14 @@ foreach ($estrofas as $e) {
 
         #panel-config {
             position: absolute; top: 65px; right: 25px; z-index: 100;
-            background: rgba(20, 20, 20, 0.98); padding: 25px;
+            background: rgba(0, 0, 0, 0.6); padding: 25px;
             border-radius: 12px; width: 300px; display: none;
-            border: 1px solid #444; color: #eee;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #eee;
             box-shadow: 0 15px 40px rgba(0,0,0,0.9);
             font-family: 'Segoe UI', sans-serif;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
         #panel-config.activo { display: block; animation: fadeIn 0.2s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
@@ -334,7 +337,8 @@ foreach ($estrofas as $e) {
             { nombre: "🔵 Azul", tipo: "color", valor: "#001f3f", texto: "#dceeff", font: "'Patua One', serif", shadow: "2px 2px 4px rgba(0,0,0,0.6)" },
             { nombre: "📜 Vintage", tipo: "imagen", valor: "assets/fondos/pergamino.png", texto: "#3d2b1f", font: "'Times New Roman', serif", shadow: "1px 1px 2px rgba(255,255,255,0.5), 0 0 5px rgba(0,0,0,0.2)" },
             { nombre: "⛰️ Paisaje", tipo: "imagen", valor: "assets/fondos/fondo1.jpg", texto: "#ffffff", font: "'Patua One', serif", shadow: "0 0 5px #000, 0 0 10px #000" },
-            { nombre: "🌊 Video", tipo: "video", valor: "assets/fondos/video1.mp4", texto: "#ffffff", font: "'Patua One', serif", shadow: "0 0 10px #000, 0 0 20px #000" }
+            { nombre: "🌊 Video", tipo: "video", valor: "assets/fondos/video1.mp4", texto: "#ffffff", font: "'Patua One', serif", shadow: "0 0 10px #000, 0 0 20px #000" },
+            { nombre: "🌈 Gradiente", tipo: "gradient", valor: "", texto: "#ffffff", font: "'Patua One', serif", shadow: "0 0 5px #000, 0 0 10px #000" }
         ];
 
         // DATOS PHP para JS
@@ -516,9 +520,28 @@ foreach ($estrofas as $e) {
             var videoBg = document.getElementById('video-bg');
             videoBg.style.display = 'none'; videoBg.pause();
             bgLayer.style.backgroundImage = 'none'; bgLayer.style.backgroundColor = '#000';
-            if (tema.tipo === 'color') bgLayer.style.backgroundColor = tema.valor;
-            else if (tema.tipo === 'imagen') bgLayer.style.backgroundImage = "url('" + tema.valor + "')";
-            else if (tema.tipo === 'video') { videoBg.src = tema.valor; videoBg.style.display = 'block'; videoBg.play()["catch"](function(e) { console.log(e); }); }
+            bgLayer.className = ''; // Limpiar clases extra
+
+            if (tema.tipo === 'color') {
+                bgLayer.style.backgroundColor = tema.valor;
+            } else if (tema.tipo === 'imagen') {
+                bgLayer.style.backgroundImage = "url('" + tema.valor + "')";
+            } else if (tema.tipo === 'video') {
+                videoBg.src = tema.valor;
+                videoBg.style.display = 'block';
+                videoBg.play()["catch"](function(e) { console.log(e); });
+            } else if (tema.tipo === 'gradient') {
+                // Aplicar gradient morph desde variables CSS del data-theme
+                bgLayer.classList.add('gradient-morph');
+                // Usar data-theme si está definido
+                var dt = document.documentElement.getAttribute('data-theme');
+                if (dt) {
+                    var start = getComputedStyle(document.documentElement).getPropertyValue('--gradient-start').trim() || '#1a5276';
+                    var end = getComputedStyle(document.documentElement).getPropertyValue('--gradient-end').trim() || '#2980b9';
+                    bgLayer.style.background = 'linear-gradient(135deg, ' + start + ', ' + end + ', ' + start + ')';
+                    bgLayer.style.backgroundSize = '200% 200%';
+                }
+            }
 
             document.documentElement.style.setProperty('--text-color', tema.texto);
             document.documentElement.style.setProperty('--font-family', tema.font);

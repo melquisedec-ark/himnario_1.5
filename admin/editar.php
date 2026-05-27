@@ -182,6 +182,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Editar Himno - Himnario Digital</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Patua+One&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="../css/style.css">
     <script>
         (function() {
@@ -221,17 +224,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <body>
 
 <div class="container mt-4 mb-5">
-    <nav aria-label="breadcrumb">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="index.php">Panel</a></li>
-            <li class="breadcrumb-item active">Editar Himno #<?php echo (int)$himno['numero_oficial']; ?></li>
-        </ol>
-    </nav>
+    <?php echo generarBreadcrumbs(['Inicio' => '../index.php', 'Panel Admin' => 'index.php', 'Editar: ' . $himno['titulo_principal'] => null]); ?>
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>✏️ Editar: <?php echo sanitizar($himno['titulo_principal']); ?></h2>
-        <div>
-            <button class="btn btn-outline-secondary btn-sm me-2" onclick="Himnario.toggleTheme()">🌗 Tema</button>
+        <div class="d-flex gap-2 align-items-center">
+            <!-- Theme variant dots -->
+            <div class="dropdown d-none d-md-inline-block">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle d-flex align-items-center gap-1" id="theme-variant-btn" data-bs-toggle="dropdown" aria-expanded="false" style="gap:4px;padding:4px 10px;">
+                    <span class="theme-dot" data-theme="blue" style="width:14px;height:14px;border-width:1px;"></span>
+                    <span style="font-size:0.75rem;">Azul</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end p-2" aria-labelledby="theme-variant-btn" style="min-width:200px;">
+                    <li><span class="dropdown-header small text-muted">Tema de Gradiente</span></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="setThemeVariant('blue', this.querySelector('.theme-dot'));return false;"><span class="theme-dot active" data-theme="blue"></span> Azul</a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="setThemeVariant('purple', this.querySelector('.theme-dot'));return false;"><span class="theme-dot" data-theme="purple"></span> Púrpura</a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="setThemeVariant('green', this.querySelector('.theme-dot'));return false;"><span class="theme-dot" data-theme="green"></span> Verde</a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="setThemeVariant('orange', this.querySelector('.theme-dot'));return false;"><span class="theme-dot" data-theme="orange"></span> Naranja</a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="setThemeVariant('pink', this.querySelector('.theme-dot'));return false;"><span class="theme-dot" data-theme="pink"></span> Rosa</a></li>
+                    <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="setThemeVariant('cyan', this.querySelector('.theme-dot'));return false;"><span class="theme-dot" data-theme="cyan"></span> Cian</a></li>
+                </ul>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" onclick="Himnario.toggleTheme()">🌗 Tema</button>
             <a href="index.php" class="btn btn-outline-primary btn-sm">Volver</a>
         </div>
     </div>
@@ -415,7 +430,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         div.innerHTML = `
             <div class="d-flex justify-content-between align-items-center mb-2">
                 ${etiquetas[tipo] || etiquetas['Estrofa']}
-                <div>
+                <div class="d-flex align-items-center gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="moverEstrofa(this, -1)" title="Subir">↑</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="moverEstrofa(this, 1)" title="Bajar">↓</button>
                     <span class="badge bg-dark me-1">#${count}</span>
                     <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.estrofa-box').remove()">✕</button>
                 </div>
@@ -427,6 +444,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         container.appendChild(div);
     };
 
+    // Función para mover estrofas arriba/abajo
+    window.moverEstrofa = function(btn, direccion) {
+        const box = btn.closest('.estrofa-box');
+        const container = document.getElementById('estrofas-container');
+        if (!box || !container) return;
+
+        if (direccion === -1 && box.previousElementSibling) {
+            container.insertBefore(box, box.previousElementSibling);
+        } else if (direccion === 1 && box.nextElementSibling) {
+            container.insertBefore(box.nextElementSibling, box);
+        } else {
+            return;
+        }
+
+        const boxes = container.querySelectorAll('.estrofa-box');
+        boxes.forEach(function(b, i) {
+            var badge = b.querySelector('.badge.bg-dark');
+            if (badge) badge.textContent = '#' + (i + 1);
+        });
+    };
+
     if (ESTROFAS_EXISTENTES && ESTROFAS_EXISTENTES.length > 0) {
         ESTROFAS_EXISTENTES.forEach(function(e) {
             agregarEstrofa(e.tipo, e.contenido || '');
@@ -435,7 +473,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     document.addEventListener('DOMContentLoaded', function() {
         Himnario.initPage('admin-editar');
+
+        // Restaurar tema visual
+        var savedTheme = localStorage.getItem('himnario_theme_variant');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            var dot = document.querySelector('.theme-dot[data-theme="' + savedTheme + '"]');
+            if (dot) dot.classList.add('active');
+        }
     });
+
+    var THEME_NAMES = { blue: 'Azul', purple: 'Púrpura', green: 'Verde', orange: 'Naranja', pink: 'Rosa', cyan: 'Cian' };
+    function setThemeVariant(theme, el) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('himnario_theme_variant', theme);
+        document.querySelectorAll('.theme-dot').forEach(function(d) { d.classList.remove('active'); });
+        if (el) el.classList.add('active');
+        var btn = document.getElementById('theme-variant-btn');
+        if (btn) {
+            var spans = btn.querySelectorAll('span');
+            if (spans.length >= 2) spans[1].textContent = THEME_NAMES[theme] || theme;
+        }
+    }
 </script>
 <script src="../js/app.js" defer></script>
 </body>

@@ -5,6 +5,11 @@
    ======================================================================== */
 
 /* ========================================
+   CAPA 1: DESIGN TOKENS
+   Variables globales compartidas por todos los temas.
+   ======================================== */
+
+/* ========================================
    1. VARIABLES DE DISEÑO (Design Tokens)
    ======================================== */
 :root {
@@ -134,6 +139,19 @@
 }
 
 /* ========================================
+   CAPA 2: THEME TOKENS
+   Data-theme gradients y modo oscuro.
+   ======================================== */
+
+/* ---- Temas de gradiente vía data-theme ---- */
+[data-theme="blue"]   { --gradient-start: #1a5276; --gradient-end: #2980b9; }
+[data-theme="purple"] { --gradient-start: #6c3483; --gradient-end: #a569bd; }
+[data-theme="green"]  { --gradient-start: #1e8449; --gradient-end: #27ae60; }
+[data-theme="orange"] { --gradient-start: #d35400; --gradient-end: #e67e22; }
+[data-theme="pink"]   { --gradient-start: #922b7a; --gradient-end: #c0398e; }
+[data-theme="cyan"]   { --gradient-start: #0e6655; --gradient-end: #17a589; }
+
+/* ========================================
    2. MODO OSCURO (Dark Mode)
    Se activa con <html data-bs-theme="dark">
    ======================================== */
@@ -185,6 +203,10 @@
     --bs-warning-text-emphasis: #ffda6a;
     --bs-danger-text-emphasis: #ea868f;
 }
+
+/* ========================================
+   CAPA 3: COMPONENT TOKENS
+   ======================================== */
 
 /* ========================================
    3. ESTILOS BASE GLOBALES
@@ -245,6 +267,151 @@ img {
 /* ========================================
    4. COMPONENTES DEL SISTEMA DE DISEÑO
    ======================================== */
+
+/* ---- 4.0 Hero Section (index.php) ---- */
+.hero-section {
+    background: linear-gradient(135deg, var(--color-primary-darkest) 0%, var(--color-primary) 50%, var(--color-primary-light) 100%);
+    color: white;
+    border-radius: var(--border-radius-lg);
+    position: relative;
+    overflow: hidden;
+}
+.hero-section::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.05) 0%, transparent 50%),
+                radial-gradient(circle at 70% 30%, rgba(255,255,255,0.03) 0%, transparent 50%);
+    pointer-events: none;
+}
+.hero-section .hero-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 var(--spacing-4);
+}
+.hero-section .hero-stat-value {
+    font-family: var(--font-heading);
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    line-height: 1;
+}
+.hero-section .hero-stat-label {
+    font-size: var(--font-size-sm);
+    opacity: 0.85;
+    margin-top: var(--spacing-1);
+}
+[data-bs-theme="dark"] .hero-section {
+    background: linear-gradient(135deg, #0a0a1a 0%, var(--color-primary-dark) 50%, #1a3a5c 100%);
+}
+
+/* ---- Filter Pills (index.php) ---- */
+.filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all var(--transition);
+    user-select: none;
+    white-space: nowrap;
+}
+.filter-pill:hover {
+    border-color: var(--color-primary-light);
+    color: var(--color-primary);
+}
+.filter-pill.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
+}
+[data-bs-theme="dark"] .filter-pill.active {
+    background: var(--color-primary-light);
+    border-color: var(--color-primary-light);
+}
+.filter-pills-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* ---- Toggle grid/lista (index.php) ---- */
+.view-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+.view-toggle-btn:hover {
+    border-color: var(--color-primary-light);
+    color: var(--color-primary);
+}
+.view-toggle-btn.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
+}
+
+.view-list .col-12 {
+    width: 100% !important;
+    flex: 0 0 100%;
+    max-width: 100%;
+}
+.view-list .himno-card {
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 16px;
+}
+.view-list .himno-card .himno-numero {
+    font-size: 2rem;
+    margin-bottom: 0;
+    margin-right: 16px;
+    min-width: 44px;
+    height: 44px;
+}
+.view-list .himno-card .himno-metadata {
+    margin-top: 0;
+}
+
+/* ---- Theme Selector (navbar) ---- */
+.theme-dot {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: inline-block;
+    flex-shrink: 0;
+}
+.theme-dot:hover {
+    transform: scale(1.2);
+}
+.theme-dot.active {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--bg-body);
+}
+.theme-dot[data-theme="blue"]   { background: linear-gradient(135deg, #1a5276, #2980b9); }
+.theme-dot[data-theme="purple"] { background: linear-gradient(135deg, #6c3483, #a569bd); }
+.theme-dot[data-theme="green"]  { background: linear-gradient(135deg, #1e8449, #27ae60); }
+.theme-dot[data-theme="orange"] { background: linear-gradient(135deg, #d35400, #e67e22); }
+.theme-dot[data-theme="pink"]   { background: linear-gradient(135deg, #922b7a, #c0398e); }
+.theme-dot[data-theme="cyan"]   { background: linear-gradient(135deg, #0e6655, #17a589); }
 
 /* ---- 4.1 Cards de himnos (index.php + admin) ---- */
 .himno-card {
@@ -506,6 +673,9 @@ img {
     box-shadow: var(--shadow-sm);
 }
 .admin-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
     background: var(--color-primary-dark);
     color: var(--color-white);
 }
@@ -870,6 +1040,31 @@ img {
 @keyframes float {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-10px); }
+}
+
+/* Skeleton loading */
+.skeleton {
+    background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-elevated) 50%, var(--bg-card) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: var(--border-radius);
+    min-height: 1em;
+}
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Gradient morph animation (visor background) */
+@keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+.gradient-morph {
+    background: linear-gradient(135deg, var(--gradient-start, #1a5276), var(--gradient-end, #2980b9), var(--gradient-start, #1a5276));
+    background-size: 200% 200%;
+    animation: gradient-shift 10s ease infinite;
 }
 
 /* Efecto glassmorphism */

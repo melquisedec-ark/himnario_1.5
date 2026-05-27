@@ -99,6 +99,24 @@ function tipoHimnoTexto($tipo) {
 /**
  * Verifica si hay sesión activa; si no, redirige al login.
  */
+/**
+ * Genera navegación de breadcrumbs (migas de pan).
+ * @param array $items Array asociativo donde key=etiqueta, value=URL (null si es activo)
+ * @return string HTML del breadcrumb
+ */
+function generarBreadcrumbs($items) {
+    $html = '<nav aria-label="breadcrumb"><ol class="breadcrumb">';
+    foreach ($items as $label => $url) {
+        if ($url) {
+            $html .= '<li class="breadcrumb-item"><a href="' . sanitizar($url) . '">' . sanitizar($label) . '</a></li>';
+        } else {
+            $html .= '<li class="breadcrumb-item active" aria-current="page">' . sanitizar($label) . '</li>';
+        }
+    }
+    $html .= '</ol></nav>';
+    return $html;
+}
+
 function verificarSesion() {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
