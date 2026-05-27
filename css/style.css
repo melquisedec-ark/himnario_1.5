@@ -268,45 +268,7 @@ img {
    4. COMPONENTES DEL SISTEMA DE DISEÑO
    ======================================== */
 
-/* ---- 4.0 Hero Section (index.php) ---- */
-.hero-section {
-    background: linear-gradient(135deg, var(--color-primary-darkest) 0%, var(--color-primary) 50%, var(--color-primary-light) 100%);
-    color: white;
-    border-radius: var(--border-radius-lg);
-    position: relative;
-    overflow: hidden;
-}
-.hero-section::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.05) 0%, transparent 50%),
-                radial-gradient(circle at 70% 30%, rgba(255,255,255,0.03) 0%, transparent 50%);
-    pointer-events: none;
-}
-.hero-section .hero-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 0 var(--spacing-4);
-}
-.hero-section .hero-stat-value {
-    font-family: var(--font-heading);
-    font-size: var(--font-size-2xl);
-    font-weight: 700;
-    line-height: 1;
-}
-.hero-section .hero-stat-label {
-    font-size: var(--font-size-sm);
-    opacity: 0.85;
-    margin-top: var(--spacing-1);
-}
-[data-bs-theme="dark"] .hero-section {
-    background: linear-gradient(135deg, #0a0a1a 0%, var(--color-primary-dark) 50%, #1a3a5c 100%);
-}
+/* ---- 4.0 (reservado) ---- */
 
 /* ---- Filter Pills (index.php) ---- */
 .filter-pill {
@@ -757,35 +719,33 @@ img {
     }
 }
 
-/* ---- 4.5 Filtros de búsqueda ---- */
-.search-filters {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--spacing-3);
-    padding: var(--spacing-4);
-    background: var(--bg-card, #ffffff);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow-sm);
-    border: var(--border-width) solid var(--border-color);
-    margin-bottom: var(--spacing-6);
+/* ---- 4.5 Filtros de búsqueda simplificados ---- */
+.search-filters-simple {
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
 }
-.search-filters .filter-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-1);
+.search-filters-simple input {
+    font-size: var(--font-size-lg);
+    padding: 12px 18px;
+    border-radius: var(--border-radius-xl);
+    border: 2px solid var(--border-color);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    background: var(--bg-input, #fff);
 }
-.search-filters .filter-group label {
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--text-secondary);
+.search-filters-simple input:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(26, 82, 118, 0.15);
+    outline: none;
 }
-.search-filters .filter-group select,
-.search-filters .filter-group input {
-    padding: var(--spacing-2) var(--spacing-3);
-    border-radius: var(--border-radius-md);
-    border: var(--border-width) solid var(--border-color);
-    background: var(--bg-input);
-    font-size: var(--font-size-sm);
+[data-bs-theme="dark"] .search-filters-simple input {
+    background: var(--color-gray-800);
+    color: var(--color-white);
+    border-color: rgba(255,255,255,0.15);
+}
+[data-bs-theme="dark"] .search-filters-simple input:focus {
+    border-color: var(--color-primary-light);
+    box-shadow: 0 0 0 3px rgba(41, 128, 185, 0.25);
 }
 
 /* ---- 4.6 Visor de Presentación (presentacion.php) ---- */
@@ -1185,14 +1145,13 @@ img {
    - .himno-numero        → badge del número
    - .himno-titulo        → título del himno
    - .himno-tipo-badge    → badge de tipo (oficial/inspirada)
-   - .search-filters      → contenedor de filtros (categoría, tipo, búsqueda)
-   - .search-container     → contenedor centrado de la búsqueda
-   - .badge-categoria     → badge de categoría
-   - .badge-tonalidad     → badge de tonalidad musical
-   - .badge-pais          → badge de país (versión)
-   - .loading-state       → mientras se cargan resultados
-   - .empty-state         → cuando no hay resultados
-   - .search-form         → formulario de búsqueda (usa .search-filters internamente)
+    - .search-filters-simple → contenedor compacto de búsqueda (input + pills)
+    - .search-container      → contenedor centrado de la búsqueda
+    - .badge-categoria      → badge de categoría
+    - .badge-tonalidad      → badge de tonalidad musical
+    - .badge-pais           → badge de país (versión)
+    - .loading-state        → mientras se cargan resultados
+    - .empty-state          → cuando no hay resultados
    
    Estructura HTML sugerida para cada resultado:
    
@@ -1312,10 +1271,6 @@ img {
         padding: var(--spacing-5);
     }
 
-    .search-filters {
-        grid-template-columns: 1fr 1fr;
-    }
-
     .estrofa-item {
         font-size: clamp(1.2rem, 3.5vw, 2.5rem);
         padding: var(--spacing-10) var(--spacing-6);
@@ -1357,11 +1312,6 @@ img {
     }
     .himno-card .himno-numero {
         align-self: flex-start;
-    }
-
-    /* Filtros: una columna */
-    .search-filters {
-        grid-template-columns: 1fr;
     }
 
     /* Tabla → lista de cards en mobile */

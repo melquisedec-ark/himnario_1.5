@@ -7,17 +7,6 @@
 require_once 'includes/db.php';
 require_once 'includes/funciones.php';
 
-// Estadísticas para el hero section
-$total_himnos = 0;
-$total_categorias = 0;
-$total_paises = 0;
-$res_h = $conexion->query("SELECT COUNT(*) as total FROM himnos WHERE activo = 1");
-if ($res_h) { $total_himnos = (int)$res_h->fetch_assoc()['total']; }
-$res_c = $conexion->query("SELECT COUNT(*) as total FROM categorias");
-if ($res_c) { $total_categorias = (int)$res_c->fetch_assoc()['total']; }
-$res_p = $conexion->query("SELECT COUNT(DISTINCT pais_id) as total FROM versiones_pais");
-if ($res_p) { $total_paises = (int)$res_p->fetch_assoc()['total']; }
-
 $busqueda = trim($_GET['q'] ?? '');
 $categoria_filtro = (int)($_GET['categoria'] ?? 0);
 $tipo_filtro = (int)($_GET['tipo'] ?? 0);
@@ -25,10 +14,6 @@ $tonalidad_filtro = trim($_GET['tonalidad'] ?? '');
 
 $resultados = [];
 $total = 0;
-
-// Cargar listas para filtros
-$categorias = $conexion->query("SELECT id, nombre FROM categorias ORDER BY nombre ASC");
-$tonalidades_list = $conexion->query("SELECT DISTINCT tonalidad_original FROM versiones_pais WHERE tonalidad_original != '' AND tonalidad_original IS NOT NULL ORDER BY tonalidad_original ASC");
 
 // Construir consulta
 $sql = "SELECT DISTINCT h.id, h.titulo_principal, h.numero_oficial, h.tipo, h.activo,
@@ -152,80 +137,25 @@ if ($stmt) {
     </div>
 </nav>
 
-<div class="container search-container">
+<div class="container search-container py-3">
 
-    <!-- Hero Section -->
-    <div class="hero-section text-center py-5 mb-4">
-        <div class="container position-relative">
-            <h1 class="display-4 fw-bold">📖 Himnario Seleccionado</h1>
-            <p class="lead mb-4">Una colección de himnos para la alabanza y adoración</p>
-            <div class="d-flex justify-content-center gap-4 gap-md-5 flex-wrap">
-                <div class="hero-stat">
-                    <span class="hero-stat-value"><?php echo $total_himnos; ?></span>
-                    <span class="hero-stat-label">Himnos</span>
-                </div>
-                <div class="hero-stat">
-                    <span class="hero-stat-value"><?php echo $total_categorias; ?></span>
-                    <span class="hero-stat-label">Categorías</span>
-                </div>
-                <div class="hero-stat">
-                    <span class="hero-stat-value"><?php echo $total_paises; ?></span>
-                    <span class="hero-stat-label">Países</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Filtros de búsqueda con pills -->
-    <form action="index.php" method="GET" class="search-filters mb-4" id="filtros-form">
-        <div class="filter-group" style="grid-column: 1 / -1;">
-            <label for="q">Buscar</label>
-            <input type="text" name="q" id="q" class="form-control"
-                   placeholder="Escribe aquí... (Ej: 'Es mi rey' o '15')"
+    <!-- Filtros simplificados: search + tipo pills compacto -->
+    <form action="index.php" method="GET" class="search-filters-simple mb-3" id="filtros-form">
+        <div class="d-flex flex-column gap-2">
+            <input type="text" name="q" id="q" class="form-control form-control-lg"
+                   placeholder="Busca himno por título o número..."
                    value="<?php echo sanitizar($busqueda); ?>" autofocus>
-        </div>
 
-        <!-- Hidden inputs para mantener valores de filtros -->
-        <input type="hidden" name="categoria" id="input-categoria" value="<?php echo $categoria_filtro; ?>">
-        <input type="hidden" name="tipo" id="input-tipo" value="<?php echo $tipo_filtro; ?>">
-        <input type="hidden" name="tonalidad" id="input-tonalidad" value="<?php echo sanitizar($tonalidad_filtro); ?>">
+            <input type="hidden" name="categoria" id="input-categoria" value="<?php echo $categoria_filtro; ?>">
+            <input type="hidden" name="tipo" id="input-tipo" value="<?php echo $tipo_filtro; ?>">
+            <input type="hidden" name="tonalidad" id="input-tonalidad" value="<?php echo sanitizar($tonalidad_filtro); ?>">
 
-        <div class="filter-group">
-            <label>Categoría</label>
-            <div class="filter-pills-group" data-filter="categoria">
-                <button type="button" class="filter-pill <?php echo $categoria_filtro === 0 ? 'active' : ''; ?>" data-value="0">Todas</button>
-                <?php if ($categorias): $categorias->data_seek(0); while($cat = $categorias->fetch_assoc()): ?>
-                    <button type="button" class="filter-pill <?php echo $categoria_filtro === (int)$cat['id'] ? 'active' : ''; ?>" data-value="<?php echo (int)$cat['id']; ?>">
-                        <?php echo sanitizar($cat['nombre']); ?>
-                    </button>
-                <?php endwhile; endif; ?>
-            </div>
-        </div>
-
-        <div class="filter-group">
-            <label>Tipo de Himno</label>
-            <div class="filter-pills-group" data-filter="tipo">
+            <div class="filter-pills-group justify-content-center" data-filter="tipo">
                 <button type="button" class="filter-pill <?php echo $tipo_filtro === 0 ? 'active' : ''; ?>" data-value="0">Todos</button>
                 <button type="button" class="filter-pill <?php echo $tipo_filtro === 1 ? 'active' : ''; ?>" data-value="1">Oficial</button>
                 <button type="button" class="filter-pill <?php echo $tipo_filtro === 2 ? 'active' : ''; ?>" data-value="2">Inspirada</button>
                 <button type="button" class="filter-pill <?php echo $tipo_filtro === 3 ? 'active' : ''; ?>" data-value="3">Convención</button>
             </div>
-        </div>
-
-        <div class="filter-group">
-            <label>Tonalidad</label>
-            <div class="filter-pills-group" data-filter="tonalidad">
-                <button type="button" class="filter-pill <?php echo $tonalidad_filtro === '' ? 'active' : ''; ?>" data-value="">Todas</button>
-                <?php if ($tonalidades_list): $tonalidades_list->data_seek(0); while($ton = $tonalidades_list->fetch_assoc()): ?>
-                    <button type="button" class="filter-pill <?php echo $tonalidad_filtro === $ton['tonalidad_original'] ? 'active' : ''; ?>" data-value="<?php echo sanitizar($ton['tonalidad_original']); ?>">
-                        <?php echo sanitizar($ton['tonalidad_original']); ?>
-                    </button>
-                <?php endwhile; endif; ?>
-            </div>
-        </div>
-
-        <div class="filter-group d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100">🔍 Buscar</button>
         </div>
     </form>
 
