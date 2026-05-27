@@ -183,6 +183,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Editar Himno - Himnario Digital</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../css/style.css">
+    <script>
+        (function() {
+            try {
+                var t = localStorage.getItem('himnario_theme');
+                if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme:dark)').matches)) {
+                    document.documentElement.setAttribute('data-bs-theme', 'dark');
+                }
+            } catch(e) {}
+        })();
+    </script>
     <style>
         .estrofa-box {
             background-color: var(--bs-tertiary-bg);

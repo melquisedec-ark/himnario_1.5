@@ -66,13 +66,8 @@ if ($tonalidad_filtro !== '') {
 }
 
 $sql .= " WHERE " . implode(" AND ", $where);
-$sql .= " GROUP BY h.id ORDER BY h.numero_oficial ASC";
-
-// Si no hay búsqueda ni filtros, limitar a 30 resultados
-$limit = ($busqueda === '' && $categoria_filtro === 0 && $tipo_filtro === 0 && $tonalidad_filtro === '') ? 30 : 200;
-$sql .= " LIMIT ?";
-$params[] = $limit;
-$types .= "i";
+$sql .= " GROUP BY h.id";
+$sql .= " ORDER BY h.tipo ASC, h.numero_oficial ASC";
 
 $stmt = $conexion->prepare($sql);
 if ($stmt) {
@@ -95,6 +90,17 @@ if ($stmt) {
     <link rel="stylesheet" href="css/style.css">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#1a5276">
+    <script>
+        // Aplicar tema guardado antes de renderizar (evita flash)
+        (function() {
+            try {
+                var t = localStorage.getItem('himnario_theme');
+                if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme:dark)').matches)) {
+                    document.documentElement.setAttribute('data-bs-theme', 'dark');
+                }
+            } catch(e) {}
+        })();
+    </script>
 </head>
 <body>
 

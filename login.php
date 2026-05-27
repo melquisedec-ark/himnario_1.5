@@ -59,6 +59,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Acceso Admin - Himnario Digital</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
+    <script>
+        (function() {
+            try {
+                var t = localStorage.getItem('himnario_theme');
+                if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme:dark)').matches)) {
+                    document.documentElement.setAttribute('data-bs-theme', 'dark');
+                }
+            } catch(e) {}
+        })();
+    </script>
     <style>
         body { height: 100vh; display: flex; align-items: center; justify-content: center; background-color: var(--bs-body-bg); }
         .login-box { max-width: 380px; width: 100%; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); background-color: var(--bs-body-bg); border: 1px solid var(--bs-border-color); }

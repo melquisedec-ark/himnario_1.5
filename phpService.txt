@@ -1,0 +1,44 @@
+🐳 Himnario Digital v1.5 — Script de inicio rápido
+===================================================
+
+Después de reiniciar la PC, ejecutar este comando para levantar
+todos los servicios:
+
+─────── Comando único ───────────────────────────────────────────
+
+docker compose -f /home/melquisedec/docker/mysql/docker-compose.yml up -d && \
+docker rm -f php_himnario15 2>/dev/null; \
+docker run -d --name php_himnario15 \
+  -v /home/melquisedec/Escritorio/Projects/Personales/himnario_1.5:/var/www/html \
+  -p 8001:80 php:8.2-cli php -S 0.0.0.0:80 -t /var/www/html && \
+sleep 3 && \
+docker exec php_himnario15 docker-php-ext-install mysqli > /dev/null 2>&1 && \
+docker network connect mysql_default php_himnario15 && \
+docker restart php_himnario15 && \
+echo "✅ Himnario corriendo en http://localhost:8001"
+
+─────── También puedes crear un script ──────────────────────────
+
+1. Crear el archivo:
+   nano ~/start-himnario.sh
+
+2. Pegar el comando de arriba y guardar.
+
+3. Dar permisos:
+   chmod +x ~/start-himnario.sh
+
+4. Ejecutar cuando sea necesario:
+   ~/start-himnario.sh
+
+
+─────── URLs de acceso ──────────────────────────────────────────
+
+  🌐 App Web:     http://localhost:8001
+  🗄️ Adminer:     http://localhost:8080
+  🔐 Login:       admin / admin123
+
+─────── Contenedores ────────────────────────────────────────────
+
+  php_himnario15    → PHP 8.2  (app web)
+  mysql_himnario_v1 → MySQL 8.0 (base de datos)
+  adminer_himnario  → Adminer  (gestor DB)
