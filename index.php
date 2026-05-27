@@ -229,11 +229,13 @@ if ($stmt) {
         </div>
     </form>
 
-    <!-- Resultados -->
+    <!-- Resultados (wrapper para reemplazo AJAX) -->
+    <div id="search-results-wrapper" class="results-section"
+         style="transition: opacity 0.3s ease, transform 0.3s ease;">
     <?php if ($total > 0): ?>
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <span class="text-muted small"><?php echo $total; ?> himno(s) encontrado(s)</span>
-            <button type="button" class="view-toggle-btn" id="view-toggle" title="Cambiar vista" onclick="toggleView()">
+        <div class="d-flex justify-content-between align-items-center mb-3" id="results-header">
+            <span class="text-muted small" id="results-count"><?php echo $total; ?> himno(s) encontrado(s)</span>
+            <button type="button" class="view-toggle-btn" id="view-toggle" title="Cambiar vista" onclick="Himnario.toggleView()">
                 <span id="view-toggle-icon">☰</span>
                 <span id="view-toggle-text">Lista</span>
             </button>
@@ -276,23 +278,66 @@ if ($stmt) {
             <?php endwhile; ?>
         </div>
     <?php elseif ($busqueda !== '' || $categoria_filtro > 0 || $tipo_filtro > 0 || $tonalidad_filtro !== ''): ?>
-        <div class="empty-state">
+        <div class="empty-state" id="results-container" data-empty="not-found">
             <div class="empty-icon">😕</div>
             <div class="empty-title">No encontramos nada</div>
             <p class="text-muted">Intenta buscar con otra palabra o ajusta los filtros.</p>
             <a href="index.php" class="btn btn-outline-primary">Limpiar filtros</a>
         </div>
     <?php else: ?>
-        <div class="empty-state">
+        <div class="empty-state" id="results-container" data-empty="welcome">
             <div class="empty-icon">📖</div>
             <div class="empty-title">Bienvenido al Himnario Digital</div>
             <p class="text-muted">Escribe un término de búsqueda o selecciona filtros para comenzar.</p>
         </div>
     <?php endif; ?>
+    </div>
 </div>
 
 <script src="js/app.js" defer></script>
 <script>
+    // ====================================================================
+    // Toggle vista grid/lista (función GLOBAL expuesta para onclick en HTML)
+    // ====================================================================
+    window.toggleViewLegacy = function() {
+        var container = document.getElementById('results-container');
+        if (!container) return;
+        var btn = document.getElementById('view-toggle');
+        var icon = document.getElementById('view-toggle-icon');
+        var text = document.getElementById('view-toggle-text');
+        if (!btn || !icon || !text) return;
+        container.classList.toggle('view-list');
+        var isList = container.classList.contains('view-list');
+        icon.textContent = isList ? '⊞' : '☰';
+        text.textContent = isList ? 'Grid' : 'Lista';
+        btn.classList.toggle('active', isList);
+        localStorage.setItem('himnario_view_mode', isList ? 'list' : 'grid');
+    };
+
+    // Theme variant names
+    var THEME_NAMES = { blue: 'Azul', purple: 'Púrpura', green: 'Verde', orange: 'Naranja', pink: 'Rosa', cyan: 'Cian' };
+
+    // Theme variant selector (global para onclick)
+    window.setThemeVariant = function(theme, el) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('himnario_theme_variant', theme);
+        document.querySelectorAll('.theme-dot').forEach(function(d) { d.classList.remove('active'); });
+        if (el) el.classList.add('active');
+        var btn = document.getElementById('theme-variant-btn');
+        if (btn) {
+            var spans = btn.querySelectorAll('span');
+            if (spans.length >= 2) {
+                spans[1].textContent = THEME_NAMES[theme] || theme;
+            }
+        }
+        if (window.Himnario && Himnario.UIUtils) {
+            Himnario.UIUtils.showToast('🎨 Tema: ' + (THEME_NAMES[theme] || theme), 'success', 1500);
+        }
+    };
+
+    // ====================================================================
+    // Módulo de búsqueda AJAX (se integra con Himnario.LiveSearch)
+    // ====================================================================
     document.addEventListener('DOMContentLoaded', function() {
         Himnario.initPage('index');
 
@@ -304,7 +349,7 @@ if ($stmt) {
             if (dot) dot.classList.add('active');
         }
 
-        // Pills de filtro: toggle y submit
+        // ---- Pills de filtro: AJAX en lugar de submit ----
         document.querySelectorAll('.filter-pills-group').forEach(function(group) {
             var filterName = group.dataset.filter;
             group.querySelectorAll('.filter-pill').forEach(function(pill) {
@@ -320,54 +365,45 @@ if ($stmt) {
                     if (hiddenInput) {
                         hiddenInput.value = this.dataset.value;
                     }
-                    // Auto-submit del formulario
-                    document.getElementById('filtros-form').submit();
+                    // Búsqueda AJAX en lugar de submit
+                    if (window.Himnario && Himnario.LiveSearch) {
+                        Himnario.LiveSearch.triggerSearch();
+                    } else {
+                        // Fallback si LiveSearch no está cargado
+                        document.getElementById('filtros-form').submit();
+                    }
                 });
             });
         });
-    });
 
-    // Toggle vista grid/lista
-    function toggleView() {
-        var container = document.getElementById('results-container');
-        var btn = document.getElementById('view-toggle');
-        var icon = document.getElementById('view-toggle-icon');
-        var text = document.getElementById('view-toggle-text');
-        container.classList.toggle('view-list');
-        var isList = container.classList.contains('view-list');
-        icon.textContent = isList ? '⊞' : '☰';
-        text.textContent = isList ? 'Grid' : 'Lista';
-        btn.classList.toggle('active', isList);
-        localStorage.setItem('himnario_view_mode', isList ? 'list' : 'grid');
-    }
+        // ---- Interceptar submit del formulario ----
+        var filtrosForm = document.getElementById('filtros-form');
+        if (filtrosForm) {
+            filtrosForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (window.Himnario && Himnario.LiveSearch) {
+                    var qInput = document.querySelector('input[name="q"]');
+                    if (qInput) {
+                        Himnario.LiveSearch.search(qInput.value.trim());
+                    } else {
+                        Himnario.LiveSearch.triggerSearch();
+                    }
+                } else {
+                    // Fallback: submit normal
+                    this.submit();
+                }
+            });
+        }
 
-    // Restaurar vista guardada
-    document.addEventListener('DOMContentLoaded', function() {
+        // ---- Restaurar vista guardada ----
         var savedView = localStorage.getItem('himnario_view_mode');
         if (savedView === 'list') {
-            toggleView();
+            // Pequeño retardo para asegurar que el DOM de resultados existe
+            setTimeout(function() {
+                window.toggleViewLegacy();
+            }, 50);
         }
     });
-
-    // Theme variant selector
-    var THEME_NAMES = { blue: 'Azul', purple: 'Púrpura', green: 'Verde', orange: 'Naranja', pink: 'Rosa', cyan: 'Cian' };
-    function setThemeVariant(theme, el) {
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('himnario_theme_variant', theme);
-        document.querySelectorAll('.theme-dot').forEach(function(d) { d.classList.remove('active'); });
-        if (el) el.classList.add('active');
-        // Feedback visual
-        var btn = document.getElementById('theme-variant-btn');
-        if (btn) {
-            var spans = btn.querySelectorAll('span');
-            if (spans.length >= 2) {
-                spans[1].textContent = THEME_NAMES[theme] || theme;
-            }
-        }
-        if (window.Himnario && Himnario.UIUtils) {
-            Himnario.UIUtils.showToast('🎨 Tema: ' + (THEME_NAMES[theme] || theme), 'success', 1500);
-        }
-    }
 
     // Service Worker (PWA)
     if ('serviceWorker' in navigator) {

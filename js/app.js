@@ -178,35 +178,52 @@ window.Himnario = (function() {
     };
 
     // ====================================================================
-    // 3. MÓDULO: BÚSQUEDA EN VIVO (LiveSearch)
+    // 3. MÓDULO: BÚSQUEDA EN VIVO (LiveSearch) — VERSIÓN AJAX
     // Usado en: index.php
+    //
+    // CAMBIOS v1.5 → v1.6:
+    //   - .search() ahora usa fetch() en lugar de form.submit()
+    //   - history.pushState() actualiza la URL sin recargar
+    //   - popstate manejado para navegación atrás/adelante
+    //   - AbortController para cancelar peticiones en curso
+    //   - Skeleton/spinner durante la carga
+    //   - Animaciones de transición en resultados
     // ====================================================================
 
     /**
-     * LiveSearch — Búsqueda en vivo con debounce.
+     * LiveSearch — Búsqueda en vivo con debounce y AJAX.
      *
      * USO EN HTML:
-     *   <input type="text" id="search-input" ...>
+     *   <input type="text" id="q" ...>
+     *   <div id="search-results-wrapper">...</div>
      *   <script>
-     *     Himnario.LiveSearch.init('#search-input', '#results-container');
+     *     Himnario.LiveSearch.init('input[name="q"]', '#search-results-wrapper');
      *   </script>
      *
-     * NOTA AL DEV: Si el backend usa formulario GET tradicional,
-     *   .search() hará submit al formulario. Si prefieres AJAX,
-     *   sobrescribe .search() con una llamada fetch().
+     * MÉTODOS EXPUESTOS:
+     *   .init(inputSelector, wrapperSelector) → Inicializa el buscador
+     *   .search(query)                         → Ejecuta búsqueda AJAX
+     *   .triggerSearch()                       → Lee todos los filtros y busca
+     *   .cancel()                              → Cancela petición en curso
+     *   .getLastQuery()                        → Último término buscado
      */
     const LiveSearch = {
         _timeout: null,
         _lastQuery: '',
+        _lastUrl: '',
+        _abortController: null,
+        _input: null,
+        _wrapper: null,
+        _form: null,
+        _popstateHandler: null,
 
         /**
          * Inicializa el buscador en vivo.
-         * @param {string} inputSelector - Selector CSS del input
-         * @param {string} [resultsSelector] - Selector del contenedor de resultados
-         * @param {string} [formSelector] - Selector del formulario
+         * @param {string} inputSelector - Selector CSS del input de búsqueda
+         * @param {string} [wrapperSelector] - Selector del wrapper de resultados
          * @returns {void}
          */
-        init: function(inputSelector, resultsSelector, formSelector) {
+        init: function(inputSelector, wrapperSelector) {
             const input = document.querySelector(inputSelector);
             if (!input) {
                 console.warn('[LiveSearch] No se encontró el input:', inputSelector);
@@ -214,21 +231,18 @@ window.Himnario = (function() {
             }
 
             this._input = input;
-            this._resultsEl = resultsSelector ? document.querySelector(resultsSelector) : null;
-            this._form = formSelector ? document.querySelector(formSelector) : null;
+            this._wrapper = wrapperSelector
+                ? document.querySelector(wrapperSelector)
+                : document.getElementById('search-results-wrapper');
+            this._form = input.closest('form');
 
-            // Si no hay formulario, busca el formulario padre más cercano
-            if (!this._form) {
-                this._form = input.closest('form');
-            }
-
-            // Evento de input con debounce
+            // --- Evento: input con debounce ---
             input.addEventListener('input', (e) => {
                 const value = e.target.value.trim();
                 this._onInput(value);
             });
 
-            // También soporta tecla Enter (búsqueda inmediata)
+            // --- Evento: Enter (búsqueda inmediata) ---
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -237,7 +251,7 @@ window.Himnario = (function() {
                 }
             });
 
-            // Evento de blur: si hay algo escrito, buscar
+            // --- Evento: blur (si hay algo, buscar) ---
             input.addEventListener('blur', (e) => {
                 const value = e.target.value.trim();
                 if (value.length >= CONFIG.search.minLength) {
@@ -245,6 +259,10 @@ window.Himnario = (function() {
                     this.search(value);
                 }
             });
+
+            // --- popstate: navegación atrás/adelante ---
+            this._popstateHandler = (e) => this._handlePopState(e);
+            window.addEventListener('popstate', this._popstateHandler);
 
             console.log('[LiveSearch] Inicializado en:', inputSelector);
         },
@@ -257,15 +275,18 @@ window.Himnario = (function() {
         _onInput: function(query) {
             this._cancelTimeout();
 
-            // Si está vacío, buscar sin filtro
+            // Vacío → buscar sin filtro (debounce corto)
             if (query.length === 0) {
                 this._timeout = setTimeout(() => this.search(''), 100);
                 return;
             }
 
-            // Si tiene al menos minLength caracteres, buscar
+            // Mínimo de caracteres antes de buscar
             if (query.length >= CONFIG.search.minLength) {
-                this._timeout = setTimeout(() => this.search(query), CONFIG.search.debounceMs);
+                this._timeout = setTimeout(
+                    () => this.search(query),
+                    CONFIG.search.debounceMs
+                );
             }
         },
 
@@ -281,41 +302,373 @@ window.Himnario = (function() {
         },
 
         /**
-         * Ejecuta la búsqueda. Por defecto, envía el formulario.
+         * Construye la URL del endpoint con los parámetros actuales.
+         * @param {string} query - Término de búsqueda
+         * @returns {string} URL completa para fetch
+         * @private
+         */
+        _buildSearchUrl: function(query) {
+            const params = new URLSearchParams();
+
+            if (query) params.set('q', query);
+
+            const catEl = document.getElementById('input-categoria');
+            const catVal = catEl ? catEl.value : '0';
+            if (catVal !== '0' && catVal !== '') params.set('categoria', catVal);
+
+            const tipoEl = document.getElementById('input-tipo');
+            const tipoVal = tipoEl ? tipoEl.value : '0';
+            if (tipoVal !== '0' && tipoVal !== '') params.set('tipo', tipoVal);
+
+            const tonEl = document.getElementById('input-tonalidad');
+            const tonVal = tonEl ? tonEl.value : '';
+            if (tonVal !== '') params.set('tonalidad', tonVal);
+
+            return 'api_search.php?' + params.toString();
+        },
+
+        /**
+         * Ejecuta la búsqueda vía AJAX.
          * @param {string} query - Término de búsqueda
          * @returns {void}
          */
         search: function(query) {
+            query = query || '';
             this._lastQuery = query;
 
-            // Actualizar el input visual para feedback
+            // Actualizar el input visual
             if (this._input) {
                 this._input.value = query;
             }
 
-            // Si hay un formulario, actualizar y enviar
-            if (this._form) {
-                const qInput = this._form.querySelector('input[name="q"]');
-                if (qInput) {
-                    qInput.value = query;
+            // Construir URL del endpoint
+            const url = this._buildSearchUrl(query);
+
+            // Evitar fetch duplicado para la misma URL
+            if (url === this._lastUrl && !this._forceSearch) return;
+            this._lastUrl = url;
+            this._forceSearch = false;
+
+            // Cancelar petición anterior (si existe)
+            if (this._abortController) {
+                this._abortController.abort();
+            }
+            this._abortController = new AbortController();
+
+            // Mostrar estado de carga
+            this._showLoading();
+
+            // Actualizar la URL del navegador (pushState)
+            this._pushState(query);
+
+            // Fetch al endpoint
+            fetch(url, {
+                signal: this._abortController.signal,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error('Error HTTP: ' + response.status);
                 }
-                this._form.submit();
-            } else {
-                console.warn('[LiveSearch] No hay formulario para enviar.');
+                return response.text();
+            })
+            .then((html) => {
+                this._hideLoading();
+                this._updateResults(html);
+
+                // Restaurar modo de vista guardado
+                this._restoreViewMode();
+
+                // Disparar evento personalizado
+                document.dispatchEvent(new CustomEvent('searchExecuted', {
+                    detail: { query: query, timestamp: Date.now(), ajax: true },
+                }));
+            })
+            .catch((err) => {
+                // Ignorar errores de abort (cancelación intencional)
+                if (err.name === 'AbortError') return;
+
+                this._hideLoading();
+                console.error('[LiveSearch] Error en fetch:', err);
+
+                // Si el fetch falla, mostrar toast de error
+                if (window.Himnario && Himnario.UIUtils) {
+                    Himnario.UIUtils.showToast(
+                        'Error al buscar. Verifica la conexión.',
+                        'error',
+                        4000
+                    );
+                }
+
+                // Fallback seguro: submit tradicional si fetch no funciona
+                this._fallbackSubmit(query);
+            });
+        },
+
+        /**
+         * Lee todos los filtros del formulario y ejecuta la búsqueda.
+         * Útil para llamar desde pills de filtro o el submit del form.
+         * @returns {void}
+         */
+        triggerSearch: function() {
+            const query = this._input ? this._input.value.trim() : '';
+            this._forceSearch = true;
+            this.search(query);
+        },
+
+        /**
+         * Actualiza la URL del navegador con history.pushState.
+         * @param {string} query
+         * @private
+         */
+        _pushState: function(query) {
+            const params = new URLSearchParams();
+
+            if (query) params.set('q', query);
+
+            const catVal = document.getElementById('input-categoria')?.value;
+            if (catVal && catVal !== '0') params.set('categoria', catVal);
+
+            const tipoVal = document.getElementById('input-tipo')?.value;
+            if (tipoVal && tipoVal !== '0') params.set('tipo', tipoVal);
+
+            const tonVal = document.getElementById('input-tonalidad')?.value;
+            if (tonVal) params.set('tonalidad', tonVal);
+
+            const queryString = params.toString();
+            const newUrl = queryString
+                ? window.location.pathname + '?' + queryString
+                : window.location.pathname;
+
+            // Solo hacer pushState si la URL cambió
+            if (newUrl !== window.location.href) {
+                const state = {
+                    q: query,
+                    categoria: catVal || '0',
+                    tipo: tipoVal || '0',
+                    tonalidad: tonVal || '',
+                };
+                try {
+                    history.pushState(state, '', newUrl);
+                } catch (e) {
+                    // Algunos navegadores restringen pushState en file://
+                    console.warn('[LiveSearch] pushState no soportado:', e.message);
+                }
+            }
+        },
+
+        /**
+         * Maneja el evento popstate (navegación atrás/adelante).
+         * @param {PopStateEvent} event
+         * @private
+         */
+        _handlePopState: function(event) {
+            // Leer parámetros de la URL actual
+            const urlParams = new URLSearchParams(window.location.search);
+            const q = urlParams.get('q') || '';
+            const categoria = urlParams.get('categoria') || '0';
+            const tipo = urlParams.get('tipo') || '0';
+            const tonalidad = urlParams.get('tonalidad') || '';
+
+            // Restaurar valores en los inputs ocultos
+            const catInput = document.getElementById('input-categoria');
+            if (catInput) catInput.value = categoria;
+
+            const tipoInput = document.getElementById('input-tipo');
+            if (tipoInput) tipoInput.value = tipo;
+
+            const tonInput = document.getElementById('input-tonalidad');
+            if (tonInput) tonInput.value = tonalidad;
+
+            // Restaurar el input de búsqueda
+            if (this._input) {
+                this._input.value = q;
             }
 
-            // Disparar evento de búsqueda
-            document.dispatchEvent(new CustomEvent('searchExecuted', {
-                detail: { query: query, timestamp: Date.now() },
-            }));
+            // Actualizar pills visualmente
+            this._syncPillsFromInputs();
+
+            // Forzar búsqueda (puede ser la misma query pero diferentes filtros)
+            this._forceSearch = true;
+            this.search(q);
+        },
+
+        /**
+         * Sincroniza el estado visual de los pills con los inputs ocultos.
+         * @private
+         */
+        _syncPillsFromInputs: function() {
+            const filters = ['categoria', 'tipo', 'tonalidad'];
+            filters.forEach(function(name) {
+                const input = document.getElementById('input-' + name);
+                if (!input) return;
+                const value = input.value;
+                const group = document.querySelector(
+                    '.filter-pills-group[data-filter="' + name + '"]'
+                );
+                if (!group) return;
+                group.querySelectorAll('.filter-pill').forEach(function(pill) {
+                    pill.classList.toggle('active', pill.dataset.value === String(value));
+                });
+            });
+        },
+
+        /**
+         * Muestra el estado de carga (skeleton/spinner) en los resultados.
+         * @private
+         */
+        _showLoading: function() {
+            if (!this._wrapper) return;
+
+            // Pequeño fade out del contenido actual
+            this._wrapper.style.opacity = '0.4';
+            this._wrapper.style.transform = 'translateY(4px)';
+
+            // Reemplazar contenido con spinner después de la transición
+            var self = this;
+            setTimeout(function() {
+                if (!self._wrapper) return;
+                self._wrapper.innerHTML =
+                    '<div class="loading-state">' +
+                        '<div class="spinner"></div>' +
+                        '<span style="margin-top:12px;color:var(--text-muted);font-size:0.9rem;">' +
+                            'Buscando himnos...' +
+                        '</span>' +
+                    '</div>';
+                self._wrapper.style.opacity = '1';
+                self._wrapper.style.transform = 'translateY(0)';
+            }, 150);
+        },
+
+        /**
+         * Oculta el estado de carga (llamado después de recibir respuesta).
+         * @private
+         */
+        _hideLoading: function() {
+            // No hace nada; _updateResults reemplaza el contenido
+        },
+
+        /**
+         * Actualiza el DOM con el HTML de resultados recibido.
+         * Incluye animación de transición.
+         * @param {string} html - HTML fragment de resultados
+         * @private
+         */
+        _updateResults: function(html) {
+            if (!this._wrapper) return;
+
+            // Aplicar fade out rápido
+            this._wrapper.style.opacity = '0';
+            this._wrapper.style.transform = 'translateY(10px)';
+
+            var self = this;
+            setTimeout(function() {
+                if (!self._wrapper) return;
+
+                // Reemplazar contenido
+                self._wrapper.innerHTML = html;
+
+                // Forzar reflow para reiniciar la animación
+                void self._wrapper.offsetHeight;
+
+                // Fade in con translate
+                self._wrapper.style.opacity = '1';
+                self._wrapper.style.transform = 'translateY(0)';
+
+                // Si el IntersectionObserver de scrollReveal existe, re-aplicarlo
+                if (window.Himnario && Himnario.PageRouter) {
+                    // Pequeño helper: revelar las nuevas cards gradualmente
+                    self._animateNewCards();
+                }
+            }, 200);
+        },
+
+        /**
+         * Anima las nuevas cards con un pequeño retardo escalonado.
+         * @private
+         */
+        _animateNewCards: function() {
+            var cards = document.querySelectorAll('.himno-card');
+            if (!cards.length) return;
+
+            // Resetear estilos inline por si acaso
+            cards.forEach(function(card, index) {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(15px)';
+                card.style.transition =
+                    'opacity 0.4s ease, transform 0.4s ease';
+                // Stagger: cada card aparece con un retardo incremental
+                setTimeout(function() {
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, 60 + (index * 30));
+            });
+
+            // Guardar referencia para cleanup
+            this._cardsAnimated = cards;
+        },
+
+        /**
+         * Restaura el modo de vista (grid/lista) guardado en localStorage.
+         * @private
+         */
+        _restoreViewMode: function() {
+            var savedView = localStorage.getItem('himnario_view_mode');
+            if (savedView === 'list') {
+                var container = document.getElementById('results-container');
+                var btn = document.getElementById('view-toggle');
+                var icon = document.getElementById('view-toggle-icon');
+                var text = document.getElementById('view-toggle-text');
+                if (container && btn && icon && text) {
+                    container.classList.add('view-list');
+                    icon.textContent = '⊞';
+                    text.textContent = 'Grid';
+                    btn.classList.add('active');
+                }
+            }
+        },
+
+        /**
+         * Fallback: submit tradicional si fetch no está disponible o falla.
+         * @param {string} query
+         * @private
+         */
+        _fallbackSubmit: function(query) {
+            if (this._form) {
+                // Actualizar el input oculto q si existe
+                var qInput = this._form.querySelector('input[name="q"]');
+                if (qInput) qInput.value = query;
+                this._form.submit();
+            }
         },
 
         cancel: function() {
             this._cancelTimeout();
+            if (this._abortController) {
+                this._abortController.abort();
+            }
         },
 
         getLastQuery: function() {
             return this._lastQuery;
+        },
+
+        /**
+         * Libera recursos (llamar al destruir la página).
+         */
+        destroy: function() {
+            this._cancelTimeout();
+            if (this._abortController) {
+                this._abortController.abort();
+            }
+            if (this._popstateHandler) {
+                window.removeEventListener('popstate', this._popstateHandler);
+            }
+            this._input = null;
+            this._wrapper = null;
+            this._form = null;
         },
     };
 
@@ -1050,9 +1403,14 @@ window.Himnario = (function() {
          * @private
          */
         _initIndex: function() {
-            // Búsqueda en vivo (opcional, si hay input de búsqueda)
+            // Búsqueda en vivo con AJAX (fetch + history.pushState)
+            // Nota: el segundo parámetro es #search-results-wrapper (no #results-container)
+            // porque el wrapper completo se reemplaza con el HTML de api_search.php
             if (document.querySelector('input[name="q"]')) {
-                LiveSearch.init('input[name="q"]', '#results-container');
+                LiveSearch.init(
+                    'input[name="q"]',
+                    '#search-results-wrapper'
+                );
             }
 
             // ThemeManager ya está inicializado arriba
@@ -1062,7 +1420,7 @@ window.Himnario = (function() {
             // Atajos de teclado
             KeyboardShortcuts.init();
 
-            // Scroll progresivo con IntersectionObserver (si hay muchas cards)
+            // Scroll progresivo con IntersectionObserver (solo en carga inicial)
             this._initScrollReveal();
         },
 
@@ -1195,6 +1553,37 @@ window.Himnario = (function() {
     // 9. EXPOSICIÓN PÚBLICA
     // ====================================================================
 
+    // ====================================================================
+    // 10. FUNCIÓN GLOBAL: toggleView (accesible desde onclick en HTML)
+    // ====================================================================
+
+    /**
+     * toggleView — Alterna entre vista grid y lista para el contenedor
+     * de resultados. Se expone como Himnario.toggleView() para que pueda
+     * ser llamada desde los onclick generados por api_search.php.
+     * @returns {void}
+     */
+    function toggleView() {
+        const container = document.getElementById('results-container');
+        if (!container) return;
+
+        const btn = document.getElementById('view-toggle');
+        const icon = document.getElementById('view-toggle-icon');
+        const text = document.getElementById('view-toggle-text');
+        if (!btn || !icon || !text) return;
+
+        container.classList.toggle('view-list');
+        const isList = container.classList.contains('view-list');
+
+        icon.textContent = isList ? '⊞' : '☰';
+        text.textContent = isList ? 'Grid' : 'Lista';
+        btn.classList.toggle('active', isList);
+
+        try {
+            localStorage.setItem('himnario_view_mode', isList ? 'list' : 'grid');
+        } catch (e) { /* ignorar */ }
+    }
+
     // Solo exponer lo necesario, mantener el resto privado
     return {
         // Configuración
@@ -1214,6 +1603,7 @@ window.Himnario = (function() {
         init: function() { ThemeManager.init(); },
         initPage: function(pageName) { PageRouter.init(pageName); },
         toggleTheme: function() { return ThemeManager.toggle(); },
+        toggleView: toggleView,
     };
 
 })();
