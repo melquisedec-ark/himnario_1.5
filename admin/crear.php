@@ -286,11 +286,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <!-- Las estrofas se agregan vía JS con EstrofaManager -->
                     </div>
                     <div class="d-flex gap-2 mt-3">
-                        <button type="button" class="btn btn-outline-primary" onclick="agregarEstrofa('Estrofa')">+ Estrofa</button>
-                        <button type="button" class="btn btn-outline-warning" onclick="agregarEstrofa('Coro')">+ Coro</button>
-                        <button type="button" class="btn btn-outline-info" onclick="agregarEstrofa('Puente')">+ Puente</button>
-                        <button type="button" class="btn btn-outline-secondary" onclick="agregarEstrofa('Intro')">+ Intro</button>
-                        <button type="button" class="btn btn-outline-danger" onclick="agregarEstrofa('Final')">+ Final</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="Himnario.EstrofaManager.add('estrofa')">+ Estrofa</button>
+                        <button type="button" class="btn btn-outline-warning" onclick="Himnario.EstrofaManager.add('coro')">+ Coro</button>
+                        <button type="button" class="btn btn-outline-info" onclick="Himnario.EstrofaManager.add('puente')">+ Puente</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="Himnario.EstrofaManager.add('intro')">+ Intro</button>
+                        <button type="button" class="btn btn-outline-danger" onclick="Himnario.EstrofaManager.add('final')">+ Final</button>
                     </div>
                 </div>
 
@@ -346,62 +346,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     document.addEventListener('DOMContentLoaded', function() {
         agregarVersion();
     });
-
-    // Función para agregar estrofas (usa el formato del nuevo schema)
-    window.agregarEstrofa = function(tipo) {
-        const container = document.getElementById('estrofas-container');
-        const count = container.children.length + 1;
-
-        const div = document.createElement('div');
-        div.className = 'estrofa-box';
-
-        const etiquetas = {
-            'Estrofa': '<span class="badge bg-primary">ESTROFA</span>',
-            'Coro': '<span class="badge bg-warning text-dark">CORO</span>',
-            'Puente': '<span class="badge bg-info text-dark">PUENTE</span>',
-            'Intro': '<span class="badge bg-secondary">INTRO</span>',
-            'Final': '<span class="badge bg-danger">FINAL</span>'
-        };
-
-        div.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                ${etiquetas[tipo] || etiquetas['Estrofa']}
-                <div class="d-flex align-items-center gap-1">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="moverEstrofa(this, -1)" title="Subir">↑</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="moverEstrofa(this, 1)" title="Bajar">↓</button>
-                    <span class="badge bg-dark me-1">#${count}</span>
-                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.estrofa-box').remove()">✕</button>
-                </div>
-            </div>
-            <input type="hidden" name="tipo_estrofa[]" value="${tipo}">
-            <textarea name="contenido_estrofa[]" class="form-control" rows="4"
-                      placeholder="Escribe la letra aquí..." required></textarea>
-        `;
-        container.appendChild(div);
-        div.querySelector('textarea').focus();
-    };
-
-    // Función para mover estrofas arriba/abajo
-    window.moverEstrofa = function(btn, direccion) {
-        const box = btn.closest('.estrofa-box');
-        const container = document.getElementById('estrofas-container');
-        if (!box || !container) return;
-
-        if (direccion === -1 && box.previousElementSibling) {
-            container.insertBefore(box, box.previousElementSibling);
-        } else if (direccion === 1 && box.nextElementSibling) {
-            container.insertBefore(box.nextElementSibling, box);
-        } else {
-            return; // No se puede mover más
-        }
-
-        // Re-indexar números
-        const boxes = container.querySelectorAll('.estrofa-box');
-        boxes.forEach(function(b, i) {
-            var badge = b.querySelector('.badge.bg-dark');
-            if (badge) badge.textContent = '#' + (i + 1);
-        });
-    };
 
     // Inicializar app
     document.addEventListener('DOMContentLoaded', function() {

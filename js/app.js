@@ -768,14 +768,18 @@ window.Himnario = (function() {
             div.innerHTML =
                 '<div class="d-flex justify-content-between align-items-center mb-2">' +
                 etiquetaHTML +
-                '<div>' +
+                '<div class="d-flex align-items-center gap-1">' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" ' +
+                'onclick="Himnario.EstrofaManager.move(this, -1)" title="Subir">↑</button>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" ' +
+                'onclick="Himnario.EstrofaManager.move(this, 1)" title="Bajar">↓</button>' +
                 '<span class="badge bg-dark me-1">#' + num + '</span>' +
                 '<button type="button" class="btn-eliminar btn btn-sm btn-outline-danger" ' +
-                'onclick="this.closest(\'.estrofa-box\').remove()">✕</button>' +
+                'onclick="this.closest(\'.estrofa-box\').remove(); Himnario.EstrofaManager._reindex();">✕</button>' +
                 '</div>' +
                 '</div>' +
-                '<input type="hidden" name="tipo[]" value="' + tipo + '">' +
-                '<textarea name="contenido[]" class="form-control estrofa-textarea" rows="4" ' +
+                '<input type="hidden" name="tipo_estrofa[]" value="' + tipo + '">' +
+                '<textarea name="contenido_estrofa[]" class="form-control estrofa-textarea" rows="4" ' +
                 'placeholder="Escribe la letra aquí..." required>' +
                 (contenido || '') +
                 '</textarea>';
@@ -814,13 +818,13 @@ window.Himnario = (function() {
         getAll: function() {
             const blocks = this._container.querySelectorAll('.estrofa-box');
             const data = [];
-            blocks.forEach((block, index) => {
-                data.push({
-                    tipo: block.querySelector('input[name="tipo[]"]')?.value || 'estrofa',
-                    contenido: block.querySelector('textarea')?.value || '',
-                    orden: index + 1,
+                blocks.forEach((block, index) => {
+                    data.push({
+                        tipo: block.querySelector('input[name="tipo_estrofa[]"]')?.value || 'estrofa',
+                        contenido: block.querySelector('textarea')?.value || '',
+                        orden: index + 1,
+                    });
                 });
-            });
             return data;
         },
 
@@ -877,6 +881,27 @@ window.Himnario = (function() {
             if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+        },
+
+        /**
+         * Mueve una estrofa desde un botón (dirección -1 arriba, 1 abajo).
+         * @param {HTMLElement} btn - Botón que disparó la acción
+         * @param {number} direccion - -1 para subir, 1 para bajar
+         * @returns {boolean} true si se movió
+         */
+        move: function(btn, direccion) {
+            const box = btn.closest('.estrofa-box');
+            const container = this._container;
+            if (!box || !container) return false;
+            if (direccion === -1 && box.previousElementSibling) {
+                container.insertBefore(box, box.previousElementSibling);
+            } else if (direccion === 1 && box.nextElementSibling) {
+                container.insertBefore(box.nextElementSibling, box);
+            } else {
+                return false;
+            }
+            this._reindex();
+            return true;
         },
 
         /**

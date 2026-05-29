@@ -337,11 +337,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <!-- Las estrofas existentes se cargan vía JS -->
                     </div>
                     <div class="d-flex gap-2 mt-3">
-                        <button type="button" class="btn btn-outline-primary" onclick="agregarEstrofa('Estrofa')">+ Estrofa</button>
-                        <button type="button" class="btn btn-outline-warning" onclick="agregarEstrofa('Coro')">+ Coro</button>
-                        <button type="button" class="btn btn-outline-info" onclick="agregarEstrofa('Puente')">+ Puente</button>
-                        <button type="button" class="btn btn-outline-secondary" onclick="agregarEstrofa('Intro')">+ Intro</button>
-                        <button type="button" class="btn btn-outline-danger" onclick="agregarEstrofa('Final')">+ Final</button>
+                        <button type="button" class="btn btn-outline-primary" onclick="Himnario.EstrofaManager.add('estrofa')">+ Estrofa</button>
+                        <button type="button" class="btn btn-outline-warning" onclick="Himnario.EstrofaManager.add('coro')">+ Coro</button>
+                        <button type="button" class="btn btn-outline-info" onclick="Himnario.EstrofaManager.add('puente')">+ Puente</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="Himnario.EstrofaManager.add('intro')">+ Intro</button>
+                        <button type="button" class="btn btn-outline-danger" onclick="Himnario.EstrofaManager.add('final')">+ Final</button>
                     </div>
                 </div>
 
@@ -380,6 +380,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     let versionCount = 0;
 
+    // Datos para EstrofaManager (evita duplicado con app.js)
+    var dataEl = document.getElementById('estrofas-data');
+    if (!dataEl) {
+        dataEl = document.createElement('script');
+        dataEl.id = 'estrofas-data';
+        dataEl.type = 'application/json';
+        dataEl.textContent = JSON.stringify(ESTROFAS_EXISTENTES);
+        document.body.appendChild(dataEl);
+    }
+
     function agregarVersion(paisId, tonalidad) {
         versionCount++;
         const container = document.getElementById('versiones-container');
@@ -412,39 +422,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         agregarVersion();
     }
 
-    // Cargar estrofas existentes
-    window.agregarEstrofa = function(tipo, contenido) {
-        const container = document.getElementById('estrofas-container');
-        const count = container.children.length + 1;
-
-        const div = document.createElement('div');
-        div.className = 'estrofa-box';
-
-        const etiquetas = {
-            'Estrofa': '<span class="badge bg-primary">ESTROFA</span>',
-            'Coro': '<span class="badge bg-warning text-dark">CORO</span>',
-            'Puente': '<span class="badge bg-info text-dark">PUENTE</span>',
-            'Intro': '<span class="badge bg-secondary">INTRO</span>',
-            'Final': '<span class="badge bg-danger">FINAL</span>'
-        };
-
-        div.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                ${etiquetas[tipo] || etiquetas['Estrofa']}
-                <div class="d-flex align-items-center gap-1">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="moverEstrofa(this, -1)" title="Subir">↑</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="moverEstrofa(this, 1)" title="Bajar">↓</button>
-                    <span class="badge bg-dark me-1">#${count}</span>
-                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.estrofa-box').remove()">✕</button>
-                </div>
-            </div>
-            <input type="hidden" name="tipo_estrofa[]" value="${tipo}">
-            <textarea name="contenido_estrofa[]" class="form-control" rows="4"
-                      placeholder="Escribe la letra aquí..." required>${contenido || ''}</textarea>
-        `;
-        container.appendChild(div);
-    };
-
     // Función para mover estrofas arriba/abajo
     window.moverEstrofa = function(btn, direccion) {
         const box = btn.closest('.estrofa-box');
@@ -465,12 +442,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             if (badge) badge.textContent = '#' + (i + 1);
         });
     };
-
-    if (ESTROFAS_EXISTENTES && ESTROFAS_EXISTENTES.length > 0) {
-        ESTROFAS_EXISTENTES.forEach(function(e) {
-            agregarEstrofa(e.tipo, e.contenido || '');
-        });
-    }
 
     document.addEventListener('DOMContentLoaded', function() {
         Himnario.initPage('admin-editar');
